@@ -88,10 +88,10 @@ int main() {
 			std::getline(bonds_infile, myline[i], '\t');
 		}
 		std::getline(bonds_infile, myline[3]);
-		for (int i = 0; i < 4; i++) {
+		/*for (int i = 0; i < 4; i++) {
 			std::cout << myline[i] << '\t';
 		}
-		std::cout << '\n';
+		std::cout << '\n';*/
 
 		// Store spin indices and coupling constants in bonds array
 		bonds[l][0] = stoi(myline[1]);
@@ -118,7 +118,7 @@ int main() {
 
 	double avgm = 0;
 	for (int i = 0; i < nspins; i++) {
-		std::cout << spins[i] << "\t";
+		//std::cout << spins[i] << "\t";
 		avgm += spins[i];
 	}
 	avgm = avgm / nspins;
@@ -550,8 +550,9 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 				if (linkops[currentv] == 2) {
 					// Get the operator p this vertex leg belongs to
 					i = 0;
-					while ( (currentv-i) % 4 != 0) {
-						p = currentv/4;
+					p = currentv/4;
+					while ( p % 4 != 0) {
+						p = (currentv-i)/4;
 						i++;
 					}
 					// Add the op this vertex leg belongs to as "to be flipped"
@@ -594,7 +595,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 					currentv = links[currentv];
 				}
 
-				// Finish loop if we have reached original leg is reached again
+				// Finish loop if we have reached original leg again
 				if (currentv == v) {
 					finished = true;
 				}
