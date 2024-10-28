@@ -1,0 +1,7 @@
+{
+    "eqsweeps": 1000,
+    "avsweeps": 1000,
+    "max_expansion_order": 1000,
+    "temperature": 10.0,
+    "transverse_field": 1.0
+}
