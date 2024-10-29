@@ -17,14 +17,9 @@
 // 4 - expansion cut off
 // 5 - input file (DONE)
 // 6 - J-coupling for individual bonds (DONE)
-
-
-
-const int nx = 10;
-const int ny = 10;
+// 7 - measuring observables
 
 int random_conf(int spins[], int nspins);
-int get_bonds(int lattice[nx][ny], int nx, int ny, int lattice_bonds[][2][2], int nbonds);
 int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 	int opstring[][3], int effexporder, double temp, double hfield);
 int cluster_updates(int spins[], int nspins, int bonds[][3],
@@ -205,67 +200,6 @@ int random_conf(int spins[], int nspins) {
 	}
 	return 0;
 	
-}
-
-int get_bonds(int lattice[nx][ny], int nx, int ny, int lattice_bonds[][2][2], int nbonds) {
-	
-	// Empty bonds array
-	for (int b = 0; b < nbonds; b++) {
-		lattice_bonds[b][0][0] = -1;
-		lattice_bonds[b][0][1] = -1;
-		lattice_bonds[b][1][0] = -1;
-		lattice_bonds[b][1][1] = -1;
-	}
-	
-	// !! SIMPLE SQUARE LATTICE
-	
-	// Set up bond index for loop
-	int bi = 0;	
-	// Iterate over lattice
-	for (int x = 0; x < nx; x++) {
-		for (int y = 0; y < ny; y++) {
-			// List of nearest neighbours
-			int nn[4][2];
-			nn[0][0] = (x+1 == nx) ? 0 : (x+1);
-			nn[0][1] = y;
-			nn[1][0] = (x-1 == -1) ? (nx-1) : (x-1)%(nx);
-			nn[1][1] = y;
-			nn[2][0] = x;
-			nn[2][1] = (y+1 == ny) ? 0 : (y+1);
-			nn[3][0] = x;
-			nn[3][1] = (y-1 == -1) ? (ny-1) : (y-1)%(ny);
-			
-			// Go through nearest neighbours
-			for (int nni = 0; nni < 4; nni++) {
-				int nnx = nn[nni][0];
-				int nny = nn[nni][1];
-				
-				// Check if bond exists
-				bool exists = false;
-				for (int b = 0; b < nbonds+1; b++) {
-					if ( (lattice_bonds[b][0][0] == x && lattice_bonds[b][0][1] == y
-						&& lattice_bonds[b][1][0] == nnx && lattice_bonds[b][1][1] == nny) ||
-						(lattice_bonds[b][1][0] == x && lattice_bonds[b][1][1] == y
-						&& lattice_bonds[b][0][0] == nnx && lattice_bonds[b][0][1] == nny) ) {
-						// Bond exists already
-						exists = true;
-						break; 
-					}
-				}
-				
-				// If bond doesn't exist, save it
-				if (!exists) {
-					lattice_bonds[bi][0][0] = x;
-					lattice_bonds[bi][0][1] = y;
-					lattice_bonds[bi][1][0] = nnx;
-					lattice_bonds[bi][1][1] = nny;
-					bi++;
-				}
-			}
-		}
-	}
-	
-	return 0;
 }
 
 int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
