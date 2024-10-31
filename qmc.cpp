@@ -11,13 +11,14 @@
 // TO IMPLEMENT:
 // 1 - flipping of single spins after flip operator updates
 //     and flipping all spins pairwise who have bond ops in between (DONE)
-// 2 - flipping of cluster spins (equiv to Fig 59, Sandvik) ?
+// 2 - flipping of cluster spins (equiv to Fig 59, Sandvik) ? (DONE ?)
 // 3 - flip updates of clusters of 2 spin ops sandwiching
-//     bond ops (1 or several)
+//     bond ops (1 or several) (DONE)
 // 4 - expansion cut off
 // 5 - input file (DONE)
 // 6 - J-coupling for individual bonds (DONE)
 // 7 - measuring observables
+// 8 - look into why max cutoff needs to be about 3x the mean expansion order?
 
 int random_conf(int spins[], int nspins);
 int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
@@ -381,7 +382,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 	// To do this, iterate over opstring
 	for (int p = 0; p < effexporder; p++) {
 		// Check if operator at p is acting on bonds or spins
-		if (opstring[p][0] == 0 && opstring[p][1] > -1) {
+		if (opstring[p][0] > 0 && opstring[p][1] > -1) {
 			// Operator is acting on bonds
 
 			// Set vertex index
@@ -394,20 +395,22 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 			// Store op type
 			linkops[v0] = 1;
 			linkops[v0+1] = 1;
+			linkops[v0+2] = 1;
+			linkops[v0+3] = 1;
 			// Get last vertex indices of each spin
 			v1 = lasts[s1i];
 			v2 = lasts[s2i];
 			// Check if spins have appeared in vertex before
 			if (v1 > -1) {
-				// First spin has appeared before
+				// First spin has appeared before, so set link
 				links[v1] = v0;
 				links[v0] = v1;
 			} else {
-				// Set first appearance of spin as current p
+				// Set first appearance of spin as current leg
 				firsts[s1i] = v0;
 			}
 			if (v2 > -1) {
-				// Second spin has appeared before
+				// Second spin has appeared before, so set link
 				links[v2] = v0+1; // ?? are we sure this is supposed to be v0 and not v0+1?
 				links[v0+1] = v2;
 			} else {
@@ -417,7 +420,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 			// Update latest vertex appearance
 			lasts[s1i] = v0+2;
 			lasts[s2i] = v0+3;
-		} else if (opstring[p][0] == 0 && opstring[p][2] > -1) {
+		} else if (opstring[p][0] > 0 && opstring[p][2] > -1) {
 			// Operator is acting on spins
 
 			// Set vertex index
@@ -426,6 +429,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 			sp = opstring[p][2];
 			// Store op type
 			linkops[v0] = 2;
+			linkops[v0+2] = 2;
 			// Get last vertex indices of each spin
 			v1 = lasts[sp];
 			// Check if spins have appeared in vertex before
@@ -442,28 +446,33 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 		}
 	}
 
-	// Finally, construct links across boundary
+    // Finally, construct links across boundary
 	int first, last;
 	for (int i = 0; i < nspins; i++) {
 		first = firsts[i];
 		if (first > -1) {
-			last = firsts[i];
-			links[first] = last;
-			links[last] = first;
+			last = lasts[i];
+			if (linkops[first] != 1 || linkops[last] != 1) {
+				links[first] = last;
+				links[last] = first;
+			}
 		}
 	}
 
 	// ----- Then trace all vertex loops and do flip updates -----
 
 	// Initialise variables
-	bool finished, fliploop, allspinops, flipops[effexporder], visited[4*effexporder];
+	bool finished, fliploop, allspinops, cont, bondops_loop[effexporder],
+        spinops_loop[effexporder], visited[4*effexporder];
 	for (int i = 0; i < 4*effexporder; i++) {
 		visited[i] = false;
 	}
 	for (int i = 0; i < effexporder; i++) {
-		flipops[i] = false;
+		bondops_loop[i] = false;
+        spinops_loop[i] = false;
 	}
-	int currentv, linkedv, lastv, i, p, free_spins[nspins];
+	int currentv, linkedv, lastv, i, p, linkedp, change_counter,
+        free_spins[nspins];
 	for (int i = 0; i < nspins; i++) {
 		free_spins[i] = 0;
 	}
@@ -472,91 +481,162 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 	// Iterate over all vertex legs
 	for (int v = 0; v < 4*effexporder; v++) {
 		// Check if vertex leg is connected to any other legs
-		// !! should also check if leg has been visited before
 		if (links[v] > -1 && !visited[v]) {
+            // Set up variables for loop
+            cont = true;
 			finished = false;
-			fliploop = true;
+            fliploop = true;
+            // Set current leg as initial leg
 			currentv = v;
-			while (!finished) {
-				visited[currentv] = true;
 
-				// Only for spin ops
-				if (linkops[currentv] == 2) {
-					// Get the operator p this vertex leg belongs to
-					i = 0;
-					p = currentv/4;
-					while ( p % 4 != 0) {
-						p = (currentv-i)/4;
-						i++;
-					}
-					// Add the op this vertex leg belongs to as "to be flipped"
-					flipops[p] = true;
-				}
+            // See if initial leg belongs to bond or spin op
+            if (linkops[currentv] == 1) {
+                // Initial leg belongs to bond op
 
-				// Check type of operator this leg is connected to
-				if (linkops[currentv] == 1) {
-					// Bond op
+                // Get opstring index
+                p = floor(currentv/(double)4);
+                
+                // Operator is part of loop
+                bondops_loop[p] = true;
+            } else {
+                // Initial leg belongs to spin op
 
-					// Check if leg is linked to bond op
-					linkedv = links[currentv];
-					if (linkedv > -1) {
-						if (linkops[linkedv] == 1) {
-							// Leg is linked to a leg on bond op
-							
-							// Change to linked leg on other bond op
-							currentv = linkedv;
-						} else if (linkops[linkedv] == 2) {
-							// Leg is linked to a leg on spin op
-							// Go to next leg on this bond op (or return to first leg)
-							currentv += ( (currentv+1)%4 == 0) ? -3 : 1;
-						} else {
-							// Leg isn't linked to anything
+                visited[v] = true;
 
-							// Abandon this loop cluster
-							finished = true;
-							fliploop = false;
-						}
-					} else {
-						// Leg isn't linked to anything
+                // Get linked leg
+                linkedv = links[currentv];
+                
+                // Check type of operator this leg is linked to
+                if (linkops[linkedv] == 1) {
+                    // Linked to bond op
+                    currentv = linkedv;
 
-						// Abandon this loop cluster
-						finished = true;
-						fliploop = false;
-					}
-				} else if (linkops[currentv] == 2) {
-					// Spin op
-					lastv = currentv;
-					currentv = links[currentv];
-				}
+                    // Get opstring index
+                    p = floor(currentv/(double)4);
+                    
+                    // Operator is part of loop
+                    bondops_loop[p] = true;
+                } else {
+                    // Linked to spin op
 
-				// Finish loop if we have reached original leg again
-				if (currentv == v) {
-					finished = true;
-				}
-			}
+                    visited[linkedv] = true;
 
-			// Check if we should flip this loop
-			coin = uni_dist(rng);
-			if (fliploop && coin < 0.5) {
-				// Loop is to be flipped
+                    // Get op indices belonging to this cluster
+                    p = floor(currentv/(double)4);
+                    linkedp = floor(linkedv/(double)4);
+                    
+                    // Set ops flippable
+                    spinops_loop[p] = true;
+                    spinops_loop[linkedp] = true;
 
-				// Iterate over all ops and see if they are part of the loop
-				for (int p = 0; p < effexporder; p++) {
-					if (flipops[p]) {
-						// Operator is part of loop, so flip
-						opstring[p][0] = (opstring[p][0] == 1) ? 2 : 1;
-						// Get spins belonging to operator that is being flipped
-						free_spins[opstring[p][2]] = 2;
-					}
-				}
-			}
+                    // Stop further loop from happening
+                    cont = false;
+                }
+            }
+            
+			// Traverse loop
+			while (cont && !finished) {
+                // Reset counter of how many ops have been added to loop
+                change_counter = 0; 
+                // Iterate over all operators
+                for (int p = 0; p < effexporder; p++) {
+                    if (bondops_loop[p]) {
+                        // Iterate over legs of op
+                        // Go through legs belonging to bond op
+                        for (int i = 0; i < 4; i++) {
+                            // Get current vertex leg
+                            currentv = 4*p+i;
+                            visited[currentv] = true;
+                            
+                            linkedv = links[currentv];
+                            linkedp = floor(linkedv/(double)4);
+                            // Check if this linked op is a bond op
+                            if (linkops[linkedv] == 1) {
+                                // Check if bond op is already part of loop
+                                if (!bondops_loop[linkedp]) {
+                                    // Bond op hasn't been added yet, so add it
+                                    bondops_loop[linkedp] = true;
+                                    change_counter++;
+                                } 
+                            }
+                        }
+                    }
+                }
 
-			// Reset list of ops to be flipped
-			for (int i = 0; i < effexporder; i++) {
-				flipops[i] = false;
-			}
-		}
-	}
+                if (change_counter == 0) {
+                    finished = true;
+                }
+	        }
+
+            // Now see if all legs of the bond ops in the cluster
+            // belong to spin ops or other bond ops in the cluster
+            for (int p = 0; p < effexporder; p++) {
+                if (bondops_loop[p]) {
+                    // Go through legs
+                    for (int i = 0; i < 4; i++) {
+                        // Get current vertex leg
+                        currentv = 4*p+i;
+                        visited[currentv] = true;
+                        
+                        linkedv = links[currentv];
+                        linkedp = floor(linkedv/(double)4);
+                        // Check if this linked op is a bond op
+                        if (linkops[linkedv] == 1) {
+                            // Check if bond op is already part of loop
+                            if (!bondops_loop[linkedp]) {
+                                // This SHOULD NOT happen, a mere safety measure
+                                fliploop = false;
+                            }
+                        } else if (linkops[linkedv] == 2) {
+                            // This leg is linked to a spin op
+
+                            visited[linkedv] = true;
+                            
+                            // Check if spin op is already part of loop
+                            if (spinops_loop[linkedp]) {
+                                // Spin op has already been added on different leg
+                                fliploop = false;
+                            } else {
+                                // Spin op hasn't been added before
+                            
+                                // Add spin op to list of ops that should be flipped
+                                spinops_loop[linkedp] = true;
+                            }
+                        } else {
+                            // This leg isn't connected to anything
+                            fliploop = false;
+                        }
+                    }
+                }
+            }
+
+            // Check if loop is flippable
+            if (fliploop && uni_dist(rng) < 0.5) {
+                // Loop is flippable
+                
+                // Iterate over all spin ops and change type
+                for (int p = 0; p < effexporder; p++) {
+                    // Check if spin op is part of loop
+                    if (spinops_loop[p]) {
+                        // Flip spin op
+                        opstring[p][0] = (opstring[p][0] == 1) ? 2 : 1;
+
+                        // Set spin as part of flipped cluster
+                        sp = opstring[p][2];
+                        free_spins[sp] = 2;
+                    }
+                }
+            } else {
+				// Loop isn't flipped
+            }
+
+            // Empty list of bond and spin ops in loop
+            for (int i = 0; i < effexporder; i++) {
+                bondops_loop[i] = false;
+                spinops_loop[i] = false;
+            }
+        }
+    }
 
 	// ----- Finally, take care of flipping spins in the periodic state -----
 
