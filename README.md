@@ -5,7 +5,7 @@
 	* *eqsweeps*: number of equilibration Monte Carlo (MC) sweeps
 	* *avsweeps*: number of averaging MC sweeps
 	* *max_expansion_order*: maximum series expansion order cutoff
-	* *temperature*: temperature multiplied by the Boltzmann constant
-	* *transverse_field*: transverse field in units of the coupling constant
+	* *temperature*: *kT*, temperature multiplied by the Boltzmann constant
+	* *transverse_field*: transverse field *h* in units of the coupling constant *J*
 3. Compile *qmc.cpp*:
 	```g++ qmc.cpp -g -o qmc```
