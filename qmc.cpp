@@ -75,8 +75,6 @@ int main() {
 	int maxexporder = data["max_expansion_order"];
 	double temp = data["temperature"];
 	double hfield = data["transverse_field"];
-	// Change this !
-	double jcoupling = 1.0;
 	
 	// ----- Randomise initial state -----
 	random_conf(spins, stoi(in_nspins));
