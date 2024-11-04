@@ -4,7 +4,6 @@
 #include <fstream>
 #include <random>
 #include <string>
-#include <vector>
 #include "json.hpp"
 
 
@@ -19,6 +18,9 @@
 // 6 - J-coupling for individual bonds (DONE)
 // 7 - measuring observables
 // 8 - look into why max cutoff needs to be about 3x the mean expansion order?
+// 9 - averaging into bins
+// 10 - set up random functions for whole programme, not in each
+//      function separately
 
 int random_conf(int spins[], int nspins);
 int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
@@ -26,36 +28,9 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 int cluster_updates(int spins[], int nspins, int bonds[][3],
 	int nbonds, int opstring[][3], int effexporder);
 int adjust_maxexporder(int opstring[][3], int effexporder);
+int measure_observables(int spins[], int nspins, int opstring[][3], int effexporder);
 
 int main() {
-	
-	/*
-	// Find all bonds and get number of bonds nbonds
-	// For the simple square lattice nbonds = nx*ny
-	//int nbonds = 2*nx*ny;
-	int lattice_bonds[nbonds][2][2];
-	get_bonds(lattice, nx, ny, lattice_bonds, nbonds);
-	
-	// Map bonds from 2D lattice to 1D string
-	int bonds[nbonds][3];
-	for (int b = 0; b < nbonds; b++) {
-		// Get coords of sites connected by bonds
-		int s1x = lattice_bonds[b][0][0];
-		int s1y = lattice_bonds[b][0][1];
-		int s2x = lattice_bonds[b][1][0];
-		int s2y = lattice_bonds[b][1][1];
-		
-		// Find spin indices for both sites
-		int s1i = spins_map[s1x][s1y];
-		int s2i = spins_map[s2x][s2y];
-		
-		// Store 1D spin indices in fresh bonds array
-		bonds[b][0] = s1i;
-		bonds[b][1] = s2i;
-		bonds[b][2] = 1;
-	}
-	std::cout << std::size(bonds) << "\n";
-	*/
 
 	// ----- Read in bonds from input file -----
 
@@ -84,10 +59,6 @@ int main() {
 			std::getline(bonds_infile, myline[i], '\t');
 		}
 		std::getline(bonds_infile, myline[3]);
-		/*for (int i = 0; i < 4; i++) {
-			std::cout << myline[i] << '\t';
-		}
-		std::cout << '\n';*/
 
 		// Store spin indices and coupling constants in bonds array
 		bonds[l][0] = stoi(myline[1]);
@@ -106,8 +77,6 @@ int main() {
 	double hfield = data["transverse_field"];
 	// Change this !
 	double jcoupling = 1.0;
-
-	std::cout << data["eqsweeps"] << "\n";
 	
 	// ----- Randomise initial state -----
 	random_conf(spins, stoi(in_nspins));
@@ -118,7 +87,7 @@ int main() {
 		avgm += spins[i];
 	}
 	avgm = avgm / nspins;
-	std::cout << avgm << "\n";
+	std::cout << "avg initial magnetisation: " << avgm << "\n";
 
 	// ----- Start Monte Carlo sweeps -----
 
@@ -149,7 +118,7 @@ int main() {
 		
 	}
 	
-	
+	// Setup for measuring average expansion order (i.e. energy)
 	int nn[avsweeps/20];
 	int nnn = 0;
 	
@@ -172,16 +141,13 @@ int main() {
 		
 	}
 	
-	for (int i = 0; i < nspins; i++) {
-		std::cout << spins[i] << "\t";
-	}
-	
+	// Find average expansion order (! to be integrated into measure_observables() !)
 	double avgn = 0;
 	for (int n = 0; n < avsweeps/20; n++) {
 		avgn += nn[n]/(double)(avsweeps/20);
 	}
 	
-	std::cout << avgn;
+	std::cout << "average expanion order: " << avgn << "\n";
 	
 	return 0;
 	
@@ -221,7 +187,6 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 			exporder = exporder - 1;
 		}
 	}
-	//std::cout << "exporder" << exporder << "\n";
 
 	// Initialise variables
 	int op_type, randb, rands, s1i, s1, s2i, s2, si;
@@ -273,7 +238,6 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				rands = rand_spin(rng);
 				
 				// Evaluate acceptance probability
-				// !! Make sure to change acceptance prob when using different lattice
 				paccept = (1/temp) * nspins * hfield / (effexporder - exporder);
 				
 				// Attempt move
@@ -300,7 +264,6 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				bj = bonds[opstring[p][1]][2];
 
 				// Evaluate acceptance probability
-				// !! Make sure to change acceptance prob when using different lattice
 				paccept = (effexporder - exporder + 1) / ((1/temp) * nbonds * bj);
 				
 				// Attempt move
@@ -314,7 +277,6 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				// Operator is acting on spins
 				
 				// Evaluate acceptance probability
-				// !! Make sure to change acceptance prob when using different lattice
 				paccept = (effexporder - exporder + 1) / (2 * (1/temp) * nspins * hfield);
 				
 				// Attempt move
@@ -331,18 +293,9 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 			// Modify spin according to opstring
 			si = opstring[p][2];
 			spins[si] *= -1;
-			
-			/*
-			for (int i = 0; i < 9; i++) {
-				std::cout << spins[i] << "\t";
-			}
-			std::cout << "\n";
-			*/
-		
 		}
 	}
-	
-	//std::cout<<exporder<<"\n";
+
 	return exporder;
 	
 }
@@ -658,12 +611,6 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 
 }
 
-int adjust_maxexporder(int opstring[][3]) {
-		
-	return 0;
-
-}
-
 int adjust_maxexporder(int opstring[][3], int effexporder) {
 	
 	int newopstring[][3] = {};
@@ -676,9 +623,19 @@ int adjust_maxexporder(int opstring[][3], int effexporder) {
 			newopstring[newopcounter][1] = opstring[p][1];
 			newopstring[newopcounter][2] = opstring[p][2];
 			
+			// ...
 		}
 	}	
 	
+	return 0;
+	
+}
+
+int measure_observables(int spins[], int nspins, int opstring[][3],
+	int effexporder) {
+
+	// ...
+
 	return 0;
 	
 }
