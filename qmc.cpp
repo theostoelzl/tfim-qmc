@@ -28,7 +28,8 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 int cluster_updates(int spins[], int nspins, int bonds[][3],
 	int nbonds, int opstring[][3], int effexporder);
 int adjust_maxexporder(int opstring[][3], int effexporder);
-int measure_observables(int spins[], int nspins, int opstring[][3], int effexporder);
+int measure_observables(int spins[], int nspins, int opstring[][3],
+	int effexporder, int obs_count, int obs_exporder[], double obs_magn[]);
 
 int main() {
 
@@ -124,9 +125,14 @@ int main() {
 		
 	}
 	
-	// Setup for measuring average expansion order (proportional energy)
-	int nn[avsweeps/20];
-	int nnn = 0;
+	// Setup for measuring observables
+	int obs_exporder[avsweeps/20];
+	double obs_magn[avsweeps/20];
+	for (int n = 0; n < avsweeps/20; n++) {
+		obs_exporder[n] = -1;
+		obs_magn[n] = -1.0;
+	}
+	int obs_count = 0;
 	
 	// Start averaging sweeps
 	for (int i = 0; i < avsweeps; i++) {
@@ -139,20 +145,35 @@ int main() {
 		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
 
 		// Measure observables (currently only expansion order)
-		nnn = measure_observables(spins, nspins, opstring, effexporder);
 		if (i%20 == 0) {
-			nn[i/20] = nnn;
+			measure_observables(spins, nspins, opstring, effexporder,
+				obs_count, obs_exporder, obs_magn);
+			obs_count++;
 		}
 		
 	}
 	
-	// Find average expansion order (! to be integrated into measure_observables() !)
+	// Find average observables
 	double avgn = 0;
-	for (int n = 0; n < avsweeps/20; n++) {
-		avgn += nn[n]/(double)(avsweeps/20);
+	avgm = 0;
+	for (int n = 0; n < obs_count; n++) {
+		avgn += obs_exporder[n]/(double)(avsweeps/20);
+		std::cout << obs_magn[n] << "\n";
+
+		avgm += obs_magn[n]/(double)(avsweeps/20);
 	}
 	
 	std::cout << "average expansion order: " << avgn << "\n";
+	std::cout << "average magnetisation: " << avgm << "\n";
+
+	/*
+	for (int i = 0; i < nspins; i++) {
+		std::cout << spins[i] << "\t"; 
+		if (i%16 == 0) {
+			std::cout << "\n"; 
+		}
+	}
+	*/
 	
 	return 0;
 	
@@ -226,7 +247,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				// Check if spins are parallel
 				// FERROMAGNETIC CASE
 				if (s1*s2 > 0) {
-					// Spins are anti-parallel so try to insert diagonal operator
+					// Spins are parallel so try to insert diagonal operator
 					paccept = (1/temp) * nbonds * bj / (2*(effexporder - exporder));
 				
 					// Attempt move
@@ -244,7 +265,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				rands = rand_spin(rng);
 				
 				// Evaluate acceptance probability
-				paccept = (1/temp) * nspins * hfield / (effexporder - exporder);
+				paccept = (1/temp) * nspins * hfield /(double) (effexporder - exporder);
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -270,7 +291,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				bj = bonds[opstring[p][1]][2];
 
 				// Evaluate acceptance probability
-				paccept = 2*(effexporder - exporder + 1) / ((1/temp) * nbonds * bj);
+				paccept = 2*(effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj);
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -460,6 +481,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
             cont = true;
 			finished = false;
             fliploop = true;
+
             // Set current leg as initial leg
 			currentv = v;
 
@@ -511,7 +533,8 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 			// Traverse loop
 			while (cont && !finished) {
                 // Reset counter of how many ops have been added to loop
-                change_counter = 0; 
+                change_counter = 0;
+
                 // Iterate over all operators
                 for (int p = 0; p < effexporder; p++) {
                     if (bondops_loop[p]) {
@@ -546,7 +569,17 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
             // Now see if all legs of the bond ops in the cluster
             // belong to spin ops or other bond ops in the cluster
             for (int p = 0; p < effexporder; p++) {
+				// Check if operator is part of current loop
                 if (bondops_loop[p]) {
+					// Operator is part of current loop
+					
+					// Get spins associated with operator and set as "part of loop"
+					bond = opstring[p][1];
+					s1i = bonds[bond][0];
+					s2i = bonds[bond][1];
+					free_spins[s1i] = 1;
+					free_spins[s2i] = 1;
+
                     // Go through legs
                     for (int i = 0; i < 4; i++) {
                         // Get current vertex leg
@@ -555,6 +588,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
                         
                         linkedv = links[currentv];
                         linkedp = floor(linkedv/(double)4);
+
                         // Check if this linked op is a bond op
                         if (linkops[linkedv] == 1) {
                             // Check if bond op is already part of loop
@@ -620,7 +654,8 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 	// Iterate over spins i
 	for (int i = 0; i < nspins; i++) {
 		// Check if spin is free
-		if (free_spins[i] == 0) {
+		//if (free_spins[i] == 0) {
+		if (firsts[i] == -1) {
 			// Spin is free, so flip with 1/2 probability
 			if (uni_dist(rng) < 0.5) {
 				spins[i] *= -1;
@@ -629,6 +664,9 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 			// Spin isn't free but is part of a cluster that has been flipped
 			spins[i] *= -1;
 		}
+
+		// Reset free-ness of spin
+		free_spins[i] = 0;
 	}
 
 	return 0;
@@ -639,6 +677,7 @@ int adjust_maxexporder(int opstring[][3], int effexporder) {
 	
 	int newopstring[][3] = {};
 	int newopcounter = 0;
+	int newexporder;
 	
 	// Copy all non-unity operators into new opstring
 	for (int p = 0; p < effexporder; p++) {
@@ -651,14 +690,16 @@ int adjust_maxexporder(int opstring[][3], int effexporder) {
 		}
 	}	
 	
-	return 0;
+	return newexporder;
 	
 }
 
 int measure_observables(int spins[], int nspins, int opstring[][3],
-	int effexporder) {
+	int effexporder, int obs_count, int obs_exporder[], double obs_magn[]) {
 
-	// Initialise variables
+	// ----- Measure internal energy (prop. to expansion order) -----
+
+	// Initialise expansion order
 	int exporder;
 
 	// Evaluate current expansion order
@@ -668,10 +709,40 @@ int measure_observables(int spins[], int nspins, int opstring[][3],
 			exporder = exporder - 1;
 		}
 	}
+	obs_exporder[obs_count] = exporder;
+
+	// ----- Measure magnetisation -----
+	
+	// Initialise variables
+	int spin = 0;
+	double avg_magn = 0;
+
+	// Iterate over all spins
+	for (int i = 0; i < nspins; i++) {
+		// Initial spin state
+		spin = spins[i];
+		//std::cout << spin;
+		
+		/*
+		// For each spin, iterate over opstring
+		for (int p = 0; p < effexporder; p++) {
+			avg_magn += double(spin);
+			// Check if an off-diagonal operator is acting on this spin
+			if (opstring[p][0] == 2 && opstring[p][2] == i) {
+				spin = spin*(double)(-1);
+			}
+		}
+		*/
+		avg_magn += spin;
+	}
+
+	// Get average and add to list
+	avg_magn = avg_magn/(double)(nspins); //*effexporder);
+	obs_magn[obs_count] = std::abs(avg_magn);
 
 	// Need to implement more observables
 	// ...
 
-	return exporder;
+	return 0;
 	
 }
