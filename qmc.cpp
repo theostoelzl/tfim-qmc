@@ -94,10 +94,18 @@ int main() {
 
 	// Initialise operator string
 	int opstring[maxexporder][3];
-	for (int i = 0; i < maxexporder; i++) {
-		opstring[i][0] = 0;
-		opstring[i][1] = -1;
-		opstring[i][2] = -1;
+	for (int p = 0; p < maxexporder; p++) {
+		// Type of operator at position p
+		// 0 - identity op
+		// 1 - diagonal op
+		// 2 - off-diagonal op
+		opstring[p][0] = 0;
+		// If operator is acting bonds, this contains bond index
+		// otherwise it's -1
+		opstring[p][1] = -1;
+		// If operator is acting on spins, this contains spin index
+		// otherwise it's -1
+		opstring[p][2] = -1;
 	}
 	
 	// Start equilibration
@@ -116,7 +124,7 @@ int main() {
 		
 	}
 	
-	// Setup for measuring average expansion order (i.e. energy)
+	// Setup for measuring average expansion order (proportional energy)
 	int nn[avsweeps/20];
 	int nnn = 0;
 	
@@ -124,18 +132,17 @@ int main() {
 	for (int i = 0; i < avsweeps; i++) {
 		
 		// Diagonal updates to insert / remove operators
-		nnn = diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
+		diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
 				effexporder, temp, hfield);
-		
-		if (i%20 == 0) {
-			nn[i/20] = nnn;
-		}
 		
 		// Cluster updates to vary diagonal / off-diagonal ops
 		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
 
-		// Measure observables
-		//measure_observables(lattice, nx, ny, opstring);
+		// Measure observables (currently only expansion order)
+		nnn = measure_observables(spins, nspins, opstring, effexporder);
+		if (i%20 == 0) {
+			nn[i/20] = nnn;
+		}
 		
 	}
 	
@@ -145,7 +152,7 @@ int main() {
 		avgn += nn[n]/(double)(avsweeps/20);
 	}
 	
-	std::cout << "average expanion order: " << avgn << "\n";
+	std::cout << "average expansion order: " << avgn << "\n";
 	
 	return 0;
 	
@@ -216,8 +223,9 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				// Get coupling constant of bond
 				bj = bonds[randb][2];	
 				
-				// Check if spins are anti-parallel
-				if (s1*s2 < 0) {
+				// Check if spins are parallel
+				// FERROMAGNETIC CASE
+				if (s1*s2 > 0) {
 					// Spins are anti-parallel so try to insert diagonal operator
 					paccept = (1/temp) * nbonds * bj / (2*(effexporder - exporder));
 				
@@ -262,7 +270,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				bj = bonds[opstring[p][1]][2];
 
 				// Evaluate acceptance probability
-				paccept = (effexporder - exporder + 1) / ((1/temp) * nbonds * bj);
+				paccept = 2*(effexporder - exporder + 1) / ((1/temp) * nbonds * bj);
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -275,7 +283,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				// Operator is acting on spins
 				
 				// Evaluate acceptance probability
-				paccept = (effexporder - exporder + 1) / (2 * (1/temp) * nspins * hfield);
+				paccept = (effexporder - exporder + 1) / ((1/temp) * nspins * hfield);
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -294,7 +302,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 		}
 	}
 
-	return exporder;
+	return 0;
 	
 }
 
@@ -323,6 +331,11 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 	// List of operator types each vertex leg belongs to
 	int linkops[4*effexporder];
 	for (int i = 0; i < 4*effexporder; i++) {
+		// This encodes the type of operator each 
+		// vertex leg belongs too
+		// 0 - identity op
+		// 1 - bond op
+		// 2 - spin op
 		linkops[i] = 0;
 	}
 
@@ -403,6 +416,10 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 		first = firsts[i];
 		if (first > -1) {
 			last = lasts[i];
+			// To avoid bond ops linking to themselves and
+			// make our lives easier later when tracing loops,
+			// ignore links between bond ops across the periodic
+			// time boundary
 			if (linkops[first] != 1 || linkops[last] != 1) {
 				links[first] = last;
 				links[last] = first;
@@ -425,6 +442,12 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 	int currentv, linkedv, lastv, i, p, linkedp, change_counter,
         free_spins[nspins];
 	for (int i = 0; i < nspins; i++) {
+		// This encodes, whether a spin is free or part of
+		// a loop that has been flipped
+		// 0 - spin is free and no op is acting on it
+		// 1 - spin isn't free but it isn't part of any
+		//     flipped loop
+		// 2 - spin isn't free and it's part of a flipped loop
 		free_spins[i] = 0;
 	}
 	double coin;
@@ -514,6 +537,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
                     }
                 }
 
+				// If loop hasn't grown in this iteration, finish the loop
                 if (change_counter == 0) {
                     finished = true;
                 }
@@ -579,6 +603,8 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
                 }
             } else {
 				// Loop isn't flipped
+				// ...
+				// Nothing happens here, so this is redundant
             }
 
             // Empty list of bond and spin ops in loop
@@ -632,8 +658,20 @@ int adjust_maxexporder(int opstring[][3], int effexporder) {
 int measure_observables(int spins[], int nspins, int opstring[][3],
 	int effexporder) {
 
+	// Initialise variables
+	int exporder;
+
+	// Evaluate current expansion order
+	exporder = effexporder;
+	for (int i = 0; i < effexporder; i++) {
+		if (opstring[i][0] == 0) {
+			exporder = exporder - 1;
+		}
+	}
+
+	// Need to implement more observables
 	// ...
 
-	return 0;
+	return exporder;
 	
 }
