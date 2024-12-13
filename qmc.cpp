@@ -25,14 +25,15 @@ using namespace std;
 //      function separately
 
 int random_conf(int spins[], int nspins);
-vector<vector<int>> diagonal_updates(int spins[], int nspins, vector<vector<int>> bonds, int nbonds,
-	vector<vector<int>> opstring, int effexporder, double temp, double hfield);
-vector<vector<int>> cluster_updates(int spins[], int nspins, vector<vector<int>> bonds,
-	int nbonds, vector<vector<int>> opstring, int effexporder);
-vector<vector<int>> adjust_maxexporder(vector<vector<int>> opstring, int effexporder);
-int measure_observables(int spins[], int nspins, vector<vector<int>> bonds, int nbonds,
-	vector<vector<int>> opstring, int effexporder, int obs_count, int obs_exporder[], 
-	double obs_magn[], double obs_nn_corr[]);
+int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
+	int opstring[][3], int effexporder, double temp, double hfield);
+int cluster_updates(int spins[], int nspins, int bonds[][3],
+	int nbonds, int opstring[][3], int effexporder);
+int adjust_maxexporder(int opstring[][3], int effexporder);
+int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
+	int opstring[][3], int effexporder, int obs_count, int obs_exporder[], 
+	double obs_magn[], double obs_magn_sq[], double obs_magn_quad[],
+	double obs_nn_corr[]);
 
 int main() {
 
@@ -54,7 +55,7 @@ int main() {
 
 	// Then, initialise arrays for all spins and bonds
 	int spins[nspins];
-	vector<vector<int>> bonds;
+	int bonds[nbonds][3];
 
 	// Read in bonds
 	string myline[4];
@@ -65,11 +66,10 @@ int main() {
 		getline(bonds_infile, myline[3]);
 
 		// Store spin indices and coupling constants in bonds array
-		bonds.push_back(vector<int> {
-			stoi(myline[1]),
-			stoi(myline[2]),
-			stoi(myline[3])
-		});
+		bonds[l][0] = stoi(myline[1]);
+		bonds[l][1] = stoi(myline[2]);
+		bonds[l][2] = stoi(myline[3]);
+
 		cout << bonds[l][0] << "\t" << bonds[l][1] << "\t" << bonds[l][2] << "\n";
 	}
 
@@ -104,12 +104,14 @@ int main() {
 	int effexporder = maxexporder;
 
 	// Initialise operator string
-	vector<vector<int>> opstring;
-	for (int i = 0; i < effexporder; i++) {
-		opstring.push_back(vector<int> {0, -1, -1});
-	}
+	int opstring[100000][3] = {};
+	/*for (int i = 0; i < effexporder; i++) {
+		//opstring.push_back(vector<int> {0, -1, -1});
+		opstring[i][0] = 0;
+		opstring[i][1] = -1;
+		opstring[i][2] = -1;
+	}*/
 
-	/*
 	for (int p = 0; p < effexporder; p++) {
 		// Type of operator at position p
 		// 0 - identity op
@@ -123,7 +125,6 @@ int main() {
 		// otherwise it's -1
 		opstring[p][2] = -1;
 	}
-	*/
 
 	cout << "Started equilibration ..." << "\n";
 	
@@ -131,18 +132,16 @@ int main() {
 	for (int i = 0; i < eqsweeps; i++) {
 		
 		// Diagonal updates to insert / remove operators
-		opstring = diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
+		diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
 				effexporder, temp, hfield);
 		
 		// Cluster updates to vary diagonal / off-diagonal ops
-		opstring = cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
+		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
 		
 		// Adjust largest expansion order
-		opstring = adjust_maxexporder(opstring, effexporder);
-		effexporder = opstring.size();
+		effexporder = adjust_maxexporder(opstring, effexporder);
 		//cout << "max exp order: " << effexporder << "\n";
 		//effexporder = maxexporder;
-		
 	}
 
 	cout << "Finished equilibration." << "\n";
@@ -150,10 +149,12 @@ int main() {
 	cout << "Started averaging ..." << "\n";
 	
 	// Setup for measuring observables
-	int obs_exporder[avsweeps/20];
-	double obs_magn[avsweeps/20];
-	double obs_nn_corr[avsweeps/20];
-	for (int n = 0; n < avsweeps/20; n++) {
+	int obs_exporder[avsweeps/100];
+	double obs_magn[avsweeps/100];
+	double obs_magn_sq[avsweeps/100];
+	double obs_magn_quad[avsweeps/100];
+	double obs_nn_corr[avsweeps/100];
+	for (int n = 0; n < avsweeps/100; n++) {
 		obs_exporder[n] = -1;
 		obs_magn[n] = -1;
 		obs_nn_corr[n] = -2;
@@ -164,17 +165,18 @@ int main() {
 	for (int i = 0; i < avsweeps; i++) {
 		
 		// Diagonal updates to insert / remove operators
-		opstring = diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
+		diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
 				effexporder, temp, hfield);
 		
 		// Cluster updates to vary diagonal / off-diagonal ops
-		opstring = cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
+		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
 
 		// Measure observables (currently only expansion order)
-		if (i%20 == 0) {
+		if (i%100 == 0) {
 			measure_observables(spins, nspins, bonds, nbonds,
 				opstring, effexporder, obs_count, obs_exporder, 
-				obs_magn, obs_nn_corr);
+				obs_magn, obs_magn_sq, obs_magn_quad,
+				obs_nn_corr);
 			obs_count++;
 		}
 		
@@ -186,11 +188,11 @@ int main() {
 	double avgn = 0, avgcorr;
 	avgm = 0;
 	for (int n = 0; n < obs_count; n++) {
-		avgn += obs_exporder[n]/(double)(avsweeps/20);
+		avgn += obs_exporder[n]/(double)(avsweeps/100);
 		//cout << obs_magn[n] << "\n";
 
-		avgm += obs_magn[n]/(double)(avsweeps/20);
-		avgcorr += obs_nn_corr[n]/(double)(avsweeps/20);
+		avgm += obs_magn[n]/(double)(avsweeps/100);
+		avgcorr += obs_nn_corr[n]/(double)(avsweeps/100);
 	}
 	
 	cout << "average expansion order: " << avgn << "\n";
@@ -225,8 +227,8 @@ int random_conf(int spins[], int nspins) {
 	
 }
 
-vector<vector<int>> diagonal_updates(int spins[], int nspins, vector<vector<int>> bonds, int nbonds,
-	vector<vector<int>> opstring, int effexporder, double temp, double hfield) {
+int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
+	int opstring[][3], int effexporder, double temp, double hfield) {
 
 	// Initialise random number generator
 	int rngseed = 178;
@@ -354,12 +356,12 @@ vector<vector<int>> diagonal_updates(int spins[], int nspins, vector<vector<int>
 		}
 	}
 
-	return opstring;
+	return 0;
 	
 }
 
-vector<vector<int>> cluster_updates(int spins[], int nspins, vector<vector<int>> bonds,
-	int nbonds, vector<vector<int>> opstring, int effexporder) {
+int cluster_updates(int spins[], int nspins, int bonds[][3],
+	int nbonds, int opstring[][3], int effexporder) {
 		
 	int rngseed = 178;
 	mt19937 rng;
@@ -700,11 +702,11 @@ vector<vector<int>> cluster_updates(int spins[], int nspins, vector<vector<int>>
 		free_spins[i] = 0;
 	}
 
-	return opstring;
+	return 0;
 
 }
 
-vector<vector<int>> adjust_maxexporder(vector<vector<int>> opstring, int effexporder) {
+int adjust_maxexporder(int opstring[][3], int effexporder) {
 
 	// Initialise random number generator
 	int rngseed = 178;
@@ -720,56 +722,67 @@ vector<vector<int>> adjust_maxexporder(vector<vector<int>> opstring, int effexpo
 		}
 	}
 
-	// Set new expansion order (roughly 1/3 more than current)
+	// Initialise new expansion order
 	int newexporder = 0;
-	newexporder = ceil(exporder*(double)1.33);
 	//cout << exporder << " " << newexporder << "\n";
 
 	// To distribute operators in new opstring evenly, define
 	// insertion probability
 	int ops_inserted, old_op = 0;
 	//double insert_prob = (newexporder-exporder)/(double)(newexporder+1);
-	double insert_prob = exporder/(double)newexporder;
+	double insert_prob = 0.33;
 	//cout << insert_prob << "\n";
 
 	// Initialise variables
-	vector<vector<int>> newopstring;
+	int newopstring[100000][3];
+	int opcount = 0;
 	bool op_inserted;
 
-	for (int p = 0; p < exporder; p++) {
-		// Try to insert operator p until it worked
-		op_inserted = false;
-		while (!op_inserted) {
-			// Find next non-identity operator
-			while (opstring[old_op][0] == 0 && old_op < effexporder) {
-				old_op++;
-			}
+	for (int p = 0; p < effexporder; p++) {
+		// Check if operator isn't identity
+		if (opstring[p][0] > 0) {
+			// Try to insert operator p until it worked
+			op_inserted = false;
 
-			// Check if probability is fulfilled
-			if (uni_dist(rng) < insert_prob) {
-				newopstring.push_back(vector<int> { 
-					opstring[old_op][0],
-					opstring[old_op][1],
-					opstring[old_op][2]
-				});
+			while (!op_inserted) {
+				// Check if probability is fulfilled
+				if (uni_dist(rng) < insert_prob) {
+					newopstring[opcount][0] = opstring[p][0];
+					newopstring[opcount][1] = opstring[p][1];
+					newopstring[opcount][2] = opstring[p][2];
+					opcount++;
 
-				// Move on to next operator
-				op_inserted = true;
-				old_op++;
-			} else {
-				// Insert identity operator
-				newopstring.push_back(vector<int> { 0, -1, -1 });
+					// Move on to next operator
+					op_inserted = true;
+					old_op++;
+				} else {
+					// Insert identity operator
+					newopstring[opcount][0] = 0;
+					newopstring[opcount][1] = -1;
+					newopstring[opcount][2] = -1;
+					opcount++;
+				}
 			}
 		}
 	}
-	
-	return newopstring;
+
+	newexporder = opcount;
+	//cout << newexporder << "\n";
+
+	for (int p = 0; p < newexporder; p++) {
+		opstring[p][0] = newopstring[p][0];
+		opstring[p][1] = newopstring[p][1];
+		opstring[p][2] = newopstring[p][2];
+	}
+
+	return newexporder;
 	
 }
 
-int measure_observables(int spins[], int nspins, vector<vector<int>> bonds, int nbonds,
-	vector<vector<int>> opstring, int effexporder, int obs_count, int obs_exporder[], 
-	double obs_magn[], double obs_nn_corr[]) {
+int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
+	int opstring[][3], int effexporder, int obs_count, int obs_exporder[], 
+	double obs_magn[], double obs_magn_sq[], double obs_magn_quad[],
+	double obs_nn_corr[]) {
 
 	// ----- Measure internal energy (prop. to expansion order) -----
 
