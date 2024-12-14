@@ -35,7 +35,7 @@ int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
 	double obs_magn[], double obs_magn_sq[], double obs_magn_quad[],
 	double obs_nn_corr[]);
 
-int main() {
+int main(int argc, char** argv) {
 
 	// ----- Read in bonds from input file -----
 
@@ -78,11 +78,18 @@ int main() {
 	ifstream f("setup.json");
 	nlohmann::json data = nlohmann::json::parse(f);
 	int eqsweeps = data["eqsweeps"];
+	int bins = data["bins"];
 	int avsweeps = data["avsweeps"];
 	int maxexporder = data["max_expansion_order"];
 	double temp = data["temperature"];
 	double hfield = data["transverse_field"];
+	// Overwrite using in-line arguments
+	temp = stod(argv[2]);
+	hfield = stod(argv[3]);
+	string out_path = argv[1]; 
 	
+	f.close();
+
 	// Take input numbers of sweeps as sweeps per spin
 	eqsweeps *= nspins;
 	avsweeps *= nspins;
@@ -97,6 +104,11 @@ int main() {
 	}
 	avgm = avgm / nspins;
 	cout << "average initial magnetisation: " << avgm << "\n---------\n";
+
+	// Open output file
+	ofstream out_file; 
+	out_file.open(out_path+"/results_t_"+to_string(temp)+"_h_"+to_string(hfield)+".csv");
+	out_file << "bin,exporder,magn,magn_sq,magn_quad,nn_corr\n";
 
 	// ----- Start Monte Carlo sweeps -----
 
@@ -127,7 +139,8 @@ int main() {
 	}
 
 	cout << "Started equilibration ..." << "\n";
-	
+	cout << flush;
+
 	// Start equilibration
 	for (int i = 0; i < eqsweeps; i++) {
 		
@@ -147,66 +160,75 @@ int main() {
 	cout << "Finished equilibration." << "\n";
 	cout << "Maximum expansion order: " << effexporder << "\n";
 	cout << "Started averaging ..." << "\n";
+	cout << flush;
 	
 	// Setup for measuring observables
-	int obs_exporder[avsweeps/100];
-	double obs_magn[avsweeps/100];
-	double obs_magn_sq[avsweeps/100];
-	double obs_magn_quad[avsweeps/100];
-	double obs_nn_corr[avsweeps/100];
-	for (int n = 0; n < avsweeps/100; n++) {
+	int obs_exporder[bins];
+	double obs_magn[bins];
+	double obs_magn_sq[bins];
+	double obs_magn_quad[bins];
+	double obs_nn_corr[bins];
+	for (int n = 0; n < bins; n++) {
 		obs_exporder[n] = -1;
 		obs_magn[n] = -1;
 		obs_nn_corr[n] = -2;
 	}
-	int obs_count = 0;
 	
 	// Start averaging sweeps
-	for (int i = 0; i < avsweeps; i++) {
-		
-		// Diagonal updates to insert / remove operators
-		diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
-				effexporder, temp, hfield);
-		
-		// Cluster updates to vary diagonal / off-diagonal ops
-		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
+	for (int n = 0; n < bins; n++) {
 
-		// Measure observables (currently only expansion order)
-		if (i%100 == 0) {
-			measure_observables(spins, nspins, bonds, nbonds,
-				opstring, effexporder, obs_count, obs_exporder, 
+		for (int j = 0; j < avsweeps; j++) {
+
+			// Diagonal updates to insert / remove operators
+			diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
+					effexporder, temp, hfield);
+			
+			// Cluster updates to vary diagonal / off-diagonal ops
+			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
+
+		}
+
+		// Measure observables
+		measure_observables(spins, nspins, bonds, nbonds,
+				opstring, effexporder, n, obs_exporder, 
 				obs_magn, obs_magn_sq, obs_magn_quad,
 				obs_nn_corr);
-			obs_count++;
-		}
 		
+		out_file << to_string(n)+","+to_string(obs_exporder[n])+","+to_string(obs_magn[n])+","
+				+to_string(obs_magn_sq[n])+","+to_string(obs_magn_quad[n])+","
+				+to_string(obs_nn_corr[n])+"\n" << flush;
+
 	}
 
+	out_file.close();
+
 	cout << "Finished averaging." << "\n";
+	cout << flush;
 	
 	// Find average observables
 	double avgn = 0, avgcorr;
 	avgm = 0;
-	for (int n = 0; n < obs_count; n++) {
-		avgn += obs_exporder[n]/(double)(avsweeps/100);
+	for (int n = 0; n < bins; n++) {
+		avgn += obs_exporder[n]/(double)(bins);
 		//cout << obs_magn[n] << "\n";
 
-		avgm += obs_magn[n]/(double)(avsweeps/100);
-		avgcorr += obs_nn_corr[n]/(double)(avsweeps/100);
+		avgm += obs_magn[n]/(double)(bins);
+		avgcorr += obs_nn_corr[n]/(double)(bins);
 	}
 	
 	cout << "average expansion order: " << avgn << "\n";
 	cout << "average magnetisation: " << avgm << "\n";
 	cout << "average nn correlation: " << avgcorr << "\n";
-
 	
+	/*
 	for (int i = 0; i < nspins; i++) {
 		cout << spins[i] << "\t"; 
 		if (i%16 == 0) {
 			cout << "\n"; 
 		}
 	}
-	
+	*/
+
 	return 0;
 	
 }
@@ -802,7 +824,7 @@ int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
 	
 	// Initialise variables
 	int spin = 0;
-	double avg_magn = 0;
+	double avg_magn, avg_magn_sq, avg_magn_quad = 0;
 
 	// Iterate over all spins
 	for (int i = 0; i < nspins; i++) {
@@ -821,12 +843,18 @@ int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
 		}
 		*/
 		avg_magn += spin;
+		avg_magn_sq += pow(spin,2);
+		avg_magn_quad += pow(spin,4);
 	}
 
 
 	// Get average and add to list
 	avg_magn = avg_magn/(double)(nspins); //*effexporder);
 	obs_magn[obs_count] = abs(avg_magn);
+	avg_magn_sq = avg_magn_sq/(double)(nspins);
+	obs_magn_sq[obs_count] = avg_magn_sq;
+	avg_magn_quad = avg_magn_quad/(double)(nspins);
+	obs_magn_quad[obs_count] = avg_magn_quad;
 	
 	// ----- Find nearest neighbour spin-spin correlations -----
 
