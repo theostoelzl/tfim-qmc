@@ -12,15 +12,15 @@ using namespace std;
 // TO IMPLEMENT:
 // 1 - flipping of single spins after flip operator updates
 //     and flipping all spins pairwise who have bond ops in between (DONE)
-// 2 - flipping of cluster spins (equiv to Fig 59, Sandvik) ? (DONE ?)
+// 2 - flipping of cluster spins (equiv to Fig 59, Sandvik) ? (DONE)
 // 3 - flip updates of clusters of 2 spin ops sandwiching
 //     bond ops (1 or several) (DONE)
-// 4 - expansion cut off
+// 4 - expansion cut off (DONE)
 // 5 - input file (DONE)
 // 6 - J-coupling for individual bonds (DONE)
-// 7 - measuring observables
+// 7 - measuring observables (heat capacity !)
 // 8 - look into why max cutoff needs to be about 3x the mean expansion order?
-// 9 - averaging into bins
+// 9 - averaging into bins (DONE)
 // 10 - set up random functions for whole programme, not in each
 //      function separately
 
@@ -187,6 +187,8 @@ int main(int argc, char** argv) {
 			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
 
 		}
+
+		// implement average within bin !!
 
 		// Measure observables
 		measure_observables(spins, nspins, bonds, nbonds,
@@ -843,17 +845,15 @@ int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
 		}
 		*/
 		avg_magn += spin;
-		avg_magn_sq += pow(spin,2);
-		avg_magn_quad += pow(spin,4);
 	}
 
 
 	// Get average and add to list
 	avg_magn = avg_magn/(double)(nspins); //*effexporder);
 	obs_magn[obs_count] = abs(avg_magn);
-	avg_magn_sq = avg_magn_sq/(double)(nspins);
+	avg_magn_sq = pow(avg_magn,2)/(double)(nspins);
 	obs_magn_sq[obs_count] = avg_magn_sq;
-	avg_magn_quad = avg_magn_quad/(double)(nspins);
+	avg_magn_quad = pow(avg_magn,4)/(double)(nspins);
 	obs_magn_quad[obs_count] = avg_magn_quad;
 	
 	// ----- Find nearest neighbour spin-spin correlations -----
