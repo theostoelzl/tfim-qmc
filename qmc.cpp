@@ -176,6 +176,17 @@ int main(int argc, char** argv) {
 	
 	// Start averaging sweeps
 	for (int n = 0; n < bins; n++) {
+		
+		int obs_exporder_bin[avsweeps];
+		double obs_magn_bin[avsweeps];
+		double obs_magn_sq_bin[avsweeps];
+		double obs_magn_quad_bin[avsweeps];
+		double obs_nn_corr_bin[avsweeps];
+		for (int  = 0; n < avsweeps; n++) {
+			obs_exporder[n] = -1;
+			obs_magn[n] = -1;
+			obs_nn_corr[n] = -2;
+		}
 
 		for (int j = 0; j < avsweeps; j++) {
 
@@ -186,15 +197,17 @@ int main(int argc, char** argv) {
 			// Cluster updates to vary diagonal / off-diagonal ops
 			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder);
 
+			
+			// Measure observables
+			measure_observables(spins, nspins, bonds, nbonds,
+					opstring, effexporder, n, obs_exporder_bin, 
+					obs_magn_bin, obs_magn_sq_bin, obs_magn_quad_bin,
+					obs_nn_corr_bin);
+
 		}
 
-		// implement average within bin !!
-
-		// Measure observables
-		measure_observables(spins, nspins, bonds, nbonds,
-				opstring, effexporder, n, obs_exporder, 
-				obs_magn, obs_magn_sq, obs_magn_quad,
-				obs_nn_corr);
+		// Now average over bin and add to big arrays
+		// ...
 		
 		out_file << to_string(n)+","+to_string(obs_exporder[n])+","+to_string(obs_magn[n])+","
 				+to_string(obs_magn_sq[n])+","+to_string(obs_magn_quad[n])+","
@@ -822,69 +835,101 @@ int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
 	}
 	obs_exporder[obs_count] = exporder;
 
-	// ----- Measure magnetisation -----
-	
+	// Copy spins to modify later on
+	int spins_mod[nspins] = {};
+	for (int i = 0; i < nspins; i++) {
+		spins_mod[i] = spins[i];
+	}
+	// Index of spin operator is acting on
+	int si = -1;
+
 	// Initialise variables
 	int spin = 0;
 	double avg_magn, avg_magn_sq, avg_magn_quad = 0;
-
-	// Iterate over all spins
-	for (int i = 0; i < nspins; i++) {
-		// Initial spin state
-		spin = spins[i];
-		//cout << spin;
-		
-		/*
-		// For each spin, iterate over opstring
-		for (int p = 0; p < effexporder; p++) {
-			avg_magn += double(spin);
-			// Check if an off-diagonal operator is acting on this spin
-			if (opstring[p][0] == 2 && opstring[p][2] == i) {
-				spin = spin*(double)(-1);
-			}
-		}
-		*/
-		avg_magn += spin;
-	}
-
-
-	// Get average and add to list
-	avg_magn = avg_magn/(double)(nspins); //*effexporder);
-	obs_magn[obs_count] = abs(avg_magn);
-	avg_magn_sq = pow(avg_magn,2)/(double)(nspins);
-	obs_magn_sq[obs_count] = avg_magn_sq;
-	avg_magn_quad = pow(avg_magn,4)/(double)(nspins);
-	obs_magn_quad[obs_count] = avg_magn_quad;
-	
-	// ----- Find nearest neighbour spin-spin correlations -----
 
 	// Initialise variables
 	int s1i, s1, s2i, s2, total_corr = 0;
 	int nn_corrs[nspins] = {0};
 	double avg_corr;
 
-	// Iterate over all bonds
-	for (int b = 0; b < nbonds; b++) {
-		// Get spins belonging to bond b
-		s1i = bonds[b][0];
-		s2i = bonds[b][1];
+	// Iterate over all propagated states
+	for (int p = 0; p < effexporder; p++) {
+		// Check if current spin state is about to be changed,
+		// so to avoid including states between which there is
+		// only an identity
+		if (opstring[p][0] != 0) {
+			// Get observables of current state
 
-		// Get spin states
-		s1 = spins[s1i];
-		s2 = spins[s2i];
+			// ----- Measure magnetisation -----
 
-		// Add product to list
-		nn_corrs[s1i] = s1*s2;
-		nn_corrs[s2i] = s1*s2;
+			// Iterate over all spins
+			for (int i = 0; i < nspins; i++) {
+				// Initial spin state
+				spin = spins_mod[i];
+				//cout << spin;
+				
+				/*
+				// For each spin, iterate over opstring
+				for (int p = 0; p < effexporder; p++) {
+					avg_magn += double(spin);
+					// Check if an off-diagonal operator is acting on this spin
+					if (opstring[p][0] == 2 && opstring[p][2] == i) {
+						spin = spin*(double)(-1);
+					}
+				}
+				*/
+				avg_magn += spin;
+			}
+			
+			// ----- Find nearest neighbour spin-spin correlations -----
+
+			// Iterate over all bonds
+			for (int b = 0; b < nbonds; b++) {
+				// Get spins belonging to bond b
+				s1i = bonds[b][0];
+				s2i = bonds[b][1];
+
+				// Get spin states
+				s1 = spins_mod[s1i];
+				s2 = spins_mod[s2i];
+
+				// Add product to list
+				nn_corrs[s1i] = s1*s2;
+				nn_corrs[s2i] = s1*s2;
+			}
+
+			// Now iterate over all spins and get average correlation
+			total_corr = 0;
+			for (int s = 0; s < nspins; s++) {
+				total_corr += nn_corrs[s];
+			}
+		}
+
+		// Apply operators to state (propagate state)
+		if (opstring[p][0] == 2) {
+			// Operator acting is off-diagonal
+			if (opstring[p][2] > -1) {
+				// Operator is acting on spin
+				si = opstring[p][2];
+
+				// Flip spin
+				spins_mod[si] *= -1;
+			}
+		}
 	}
 
-	// Now iterate over all spins and get average correlation
-	total_corr = 0;
-	for (int s = 0; s < nspins; s++) {
-		total_corr += nn_corrs[s];
-	}
+	
+	// Get averages and add to lists
+	//avg_magn = avg_magn/(double)(nspins); //*effexporder);
+	avg_magn = avg_magn/(double)(exporder);
+	obs_magn[obs_count] = avg_magn/(double)(nspins); // abs(avg_magn);
+	avg_magn_sq = pow(avg_magn,2)/(double)(nspins);
+	obs_magn_sq[obs_count] = avg_magn_sq;
+	avg_magn_quad = pow(avg_magn,4)/(double)(nspins);
+	obs_magn_quad[obs_count] = avg_magn_quad;
+
 	// Normalise correlation and add to list
-	avg_corr = total_corr/(double)nspins;
+	avg_corr = total_corr/(double)(exporder*nspins);
 	obs_nn_corr[obs_count] = avg_corr;
 
 	// Need to implement more observables
