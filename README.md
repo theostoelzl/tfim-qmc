@@ -10,5 +10,5 @@
 	* *transverse_field* (obsolete): transverse field *h* in units of the coupling constant *J*
 3. Compile *qmc.cpp*:
 	```g++ qmc.cpp -g -o qmc```
-4. Run executable with inline parameter:
+4. Run executable with inline parameters:
 	```./qmc {output directoy} {temperature} {transverse field}```
