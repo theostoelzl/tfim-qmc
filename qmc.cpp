@@ -26,9 +26,9 @@ using namespace std;
 
 int random_conf(int spins[], int nspins, mt19937 &rng);
 int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
-	int opstring[][3], int effexporder, double temp, double hfield, mt19937 &rng);
+	int opstring[][3], int effexporder, double temp, double hfield, mt19937 &rng, ofstream &cont_out);
 int cluster_updates(int spins[], int nspins, int bonds[][3],
-	int nbonds, int opstring[][3], int effexporder, mt19937 &rng);
+	int nbonds, int opstring[][3], int effexporder, mt19937 &rng, ofstream &cont_out);
 int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng);
 int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
 	int opstring[][3], int effexporder, int obs_count, double obs_exporder[], 
@@ -101,8 +101,25 @@ int main(int argc, char** argv) {
 	eqsweeps *= nspins;
 	avsweeps *= nspins;
 
-	// ----- Randomise initial state -----
-	random_conf(spins, stoi(in_nspins), rng);
+	// ----- Get initial state or generate new one -----
+
+	// Try opening input file containing spins
+	ifstream spins_infile;
+	spins_infile.open("spins.txt");
+	if (spins_infile.good()) {
+
+		// Read in spins
+		string spin_in;
+		for (int l = 0; l < nspins; l++) {
+			getline(spins_infile, spin_in, '\n');
+
+			// Set spin
+			spins[l] = stoi(spin_in);
+		}
+	} else {
+		random_conf(spins, stoi(in_nspins), rng);
+	}
+	spins_infile.close();
 
 	double avgm = 0;
 	for (int i = 0; i < nspins; i++) {
@@ -111,11 +128,6 @@ int main(int argc, char** argv) {
 	}
 	avgm = avgm / nspins;
 	cout << "average initial magnetisation: " << avgm << "\n---------\n";
-
-	// Open output file
-	ofstream out_file; 
-	out_file.open(out_path+"/results_t_"+to_string(temp)+"_h_"+to_string(hfield)+".csv");
-	out_file << "bin,exporder,exporder_sq,magn,magn_sq,magn_quad,nn_corr\n";
 
 	// ----- Start Monte Carlo sweeps -----
 
@@ -131,7 +143,7 @@ int main(int argc, char** argv) {
 		opstring[i][2] = -1;
 	}*/
 
-	for (int p = 0; p < effexporder; p++) {
+	for (int p = 0; p < 100000; p++) {
 		// Type of operator at position p
 		// 0 - identity op
 		// 1 - diagonal op
@@ -145,18 +157,67 @@ int main(int argc, char** argv) {
 		opstring[p][2] = -1;
 	}
 
+	// Try opening input file containing opstring
+	ifstream ops_infile;
+	ops_infile.open("opstring.txt");
+	if (ops_infile.good()) {
+		// Read in maximum expansion order
+		string in_effexporder;
+		getline(ops_infile, in_effexporder, '\n');
+		effexporder = stoi(in_effexporder);
+
+		// Read in opstring
+		string myline[3];
+		for (int l = 0; l < nspins; l++) {
+			for (int i = 0; i < 2; i++) {
+				getline(ops_infile, myline[i], '\t');
+			}
+			getline(ops_infile, myline[2], '\n');
+
+			// Set opstring
+			opstring[l][0] = stoi(myline[0]);
+			opstring[l][1] = stoi(myline[1]);
+			opstring[l][2] = stoi(myline[2]);
+		}
+	}
+	ops_infile.close();
+
 	cout << "Started equilibration ..." << "\n";
 	cout << flush;
 
 	// Start equilibration
 	for (int i = 0; i < eqsweeps; i++) {
+
+		ofstream cont_out; 
+		cont_out.open("sweeps/cont_out_"+to_string(i)+".txt");
 		
+		cont_out << "===== BEGIN SWEEP =====\n\n";
+
+		// Debug spins
+		cont_out << "----- BEFORE SPINS -----\n";
+		for (int s = 0; s < nspins; s++) {
+			cont_out << spins[s] << "\n";
+		}
+		cont_out << "----------\n";
+
+		cont_out << "----- BEFORE OPSTRING -----\n";
+		for (int p = 0; p < effexporder; p++) {
+			cont_out << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
+		}
+		cont_out << "----------\n";
+
 		// Diagonal updates to insert / remove operators
 		diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
-				effexporder, temp, hfield, rng);
+				effexporder, temp, hfield, rng, cont_out);
+		
+		cont_out << "----- AFTER DIAGONAL SPINS -----\n";
+		for (int s = 0; s < nspins; s++) {
+			cont_out << spins[s] << "\n";
+		}
+		cont_out << "----------\n";
 		
 		// Cluster updates to vary diagonal / off-diagonal ops
-		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
+		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng, cont_out);
 		
 		// Adjust largest expansion order
 		effexporder = adjust_maxexporder(opstring, effexporder, rng);
@@ -172,18 +233,31 @@ int main(int argc, char** argv) {
 			cout << "\n\n";
 	*/
 
-	}
-
-	for (int p = 0; p < effexporder; p++) {
-		if (opstring[p][2] != -1) {
-			cout << "haltstopp" << "\n"; 
+		// Debug spins
+		cont_out << "----- AFTER SPINS -----\n";
+		for (int s = 0; s < nspins; s++) {
+			cont_out << spins[s] << "\n";
 		}
+		cont_out << "----------\n";
+
+		cont_out << "----- AFTER OPSTRING -----\n";
+		for (int p = 0; p < effexporder; p++) {
+			cont_out << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
+		}
+		cont_out << "----------\n";
+		cont_out.close();
+
 	}
 
 	cout << "Finished equilibration." << "\n";
 	cout << "Maximum expansion order: " << effexporder << "\n";
 	cout << "Started averaging ..." << "\n";
 	cout << flush;
+
+	// Open output file
+	ofstream out_file; 
+	out_file.open(out_path+"/results_t_"+to_string(temp)+"_h_"+to_string(hfield)+".csv");
+	out_file << "bin,exporder,exporder_sq,magn,magn_sq,magn_quad,nn_corr\n";
 	
 	// Setup for measuring observables
 	double obs_exporder[bins];
@@ -221,18 +295,23 @@ int main(int argc, char** argv) {
 
 		for (int j = 0; j < avsweeps; j++) {
 
+			ofstream cont_out; 
+			cont_out.open("sweeps/cont_out_avg_"+to_string(j)+".txt");
+
 			// Diagonal updates to insert / remove operators
 			diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
-					effexporder, temp, hfield, rng);
+					effexporder, temp, hfield, rng, cont_out);
 
 			// Cluster updates to vary diagonal / off-diagonal ops
-			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
+			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng, cont_out);
 			
 			// Measure observables
 			measure_observables(spins, nspins, bonds, nbonds, opstring,
 					effexporder, j, obs_exporder_bin, obs_exporder_sq_bin,
 					obs_magn_bin, obs_magn_sq_bin, obs_magn_quad_bin,
 					obs_nn_corr_bin);
+
+			cont_out.close();
 
 		}
 
@@ -281,6 +360,25 @@ int main(int argc, char** argv) {
 	}
 	*/
 
+	// Write spins to output file
+	ofstream spins_out;
+	spins_out.open("spins.txt");
+	for (int s = 0; s < nspins; s++) {
+		spins_out << spins[s] << "\n";
+	}
+	spins_out.close();
+
+	// Write opstring to output file
+	ofstream ops_out;
+	ops_out.open("opstring.txt");
+	ops_out << effexporder << "\n";
+	for (int p = 0; p < effexporder; p++) {
+		ops_out << opstring[p][0] << "\t" 
+			<< opstring[p][1] << "\t" 
+			<< opstring[p][2] << "\n";
+	}
+	ops_out.close();
+
 	return 0;
 	
 }
@@ -299,7 +397,7 @@ int random_conf(int spins[], int nspins, mt19937 &rng) {
 }
 
 int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
-	int opstring[][3], int effexporder, double temp, double hfield, mt19937 &rng) {
+	int opstring[][3], int effexporder, double temp, double hfield, mt19937 &rng, ofstream &cont_out) {
 
 	// Initialise random number generator
 	uniform_real_distribution<double> uni_dist(0,1);
@@ -349,8 +447,9 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				// if bj > 0, ferromagnetic bond
 				if (bj*s1*s2 > 0) {
 					// Spins are arranged correctly so try to insert diagonal operator
-					//paccept = (1/temp) * nbonds * bj /(double) (2*(effexporder - exporder));
-					paccept = (1/temp) * nbonds * bj /(double) (effexporder - exporder);
+					// paccept = (1/temp) * nbonds * bj /(double) (2*(effexporder - exporder)); // original (wrong!)
+					// paccept = (1/temp) * nbonds * bj /(double) (effexporder - exporder); // fixed (spin 1/2)
+					paccept = (1/temp) * 2 * nbonds * 2 * bj /(double) (effexporder - exporder); // spin 1
 					
 						//cout << "in" << exporder << "\t" << effexporder << "\t" << 1/temp 
 								//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
@@ -401,8 +500,9 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				bj = bonds[opstring[p][1]][2];
 
 				// Evaluate acceptance probability
-				//paccept = 2*(effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj);
-				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj);
+				//paccept = 2*(effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // original (wrong!)
+				// paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // spin 1/2
+				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nbonds * 2 * bj); // spin 1
 
 				//cout << "out" << exporder << "\t" << effexporder << "\t" << 1/temp 
 						//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
@@ -437,15 +537,29 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 			// Modify spin according to opstring
 			si = opstring[p][2];
 			spins[si] *= -1;
+			cont_out << "flipped spin " << si << "\n";
 		}
 	}
+
+	// How many bond ops?
+	int count_bond = 0;
+	int count_sp = 0;
+	for (int i = 0; i < effexporder; i++) {
+		if (opstring[i][0] > 0 && opstring[i][1] > -1) {
+			count_bond++;
+		}
+		if (opstring[i][0] > 1 && opstring[i][2] > -1) {
+			count_sp++;
+		}
+	}
+	// cout << count_bond << " bond ops\t" << count_sp << " spin ops\n";
 
 	return 0;
 	
 }
 
 int cluster_updates(int spins[], int nspins, int bonds[][3],
-	int nbonds, int opstring[][3], int effexporder, mt19937 &rng) {
+	int nbonds, int opstring[][3], int effexporder, mt19937 &rng, ofstream &cont_out) {
 	
 	// Random stuff
 	uniform_real_distribution<double> uni_dist(0,1);
@@ -546,22 +660,36 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 		}
 	}
 
+	/* LEGACY - need to figure this out !
+	
+	Deactivate cross-boundary links completely to avoid illegal moves,
+	where two operators are updates and consequently the periodic state
+	would have to be updated, which might lead to clashes with other
+	operators that aren't involved in the cluster update.
+
     // Finally, construct links across boundary
-	int first, last;
+	int first, last, pfirst, plast;
 	for (int i = 0; i < nspins; i++) {
 		first = firsts[i];
 		if (first > -1) {
 			last = lasts[i];
+
+			// Get operators first and last legs belong to
+			pfirst = floor(first/(double)4);
+			plast = floor(last/(double)4);
+
 			// To avoid bond ops linking to themselves and
 			// make our lives easier later when tracing loops,
 			// ignore links between bond ops across the periodic
 			// time boundary
-			if (linkops[first] != 1 || linkops[last] != 1) {
+			if ((linkops[first] != 1 || linkops[last] != 1) && pfirst != plast) {
 				links[first] = last;
 				links[last] = first;
 			}
 		}
 	}
+
+	*/
 
 	// ----- Then trace all vertex loops and do flip updates -----
 
@@ -714,62 +842,85 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
                         linkedv = links[currentv];
                         linkedp = floor(linkedv/(double)4);
 
-                        // Check if this linked op is a bond op or spin op
-                        if (linkops[linkedv] == 1) {
-                            // Check if bond op is already part of loop
-                            if (!bondops_loop[linkedp]) {
-                                // This SHOULD NOT happen, a mere safety measure
-                                fliploop = false;
-                            }
-                        } else if (linkops[linkedv] == 2) {
-                            // This leg is linked to a spin op
+						// Only proceed if this leg is linked to anything
+						if (linkedv != -1) {
+							// !! why do what's below ??
 
-                            visited[linkedv] = true;
-                            
-                            // Check if spin op is already part of loop
-                            if (spinops_loop[linkedp]) {
-                                // Spin op has already been added on different leg
-                                fliploop = false;
-                            } else {
-                                // Spin op hasn't been added before
-                            
-                                // Add spin op to list of ops that should be flipped
-                                
-								spinops_loop[linkedp] = true;
-                            }
-                        } else {
-                            // This leg isn't connected to anything
-                            fliploop = false;
-                        }
+							// Check if this linked op is a bond op or spin op
+							if (linkops[linkedv] == 1) {
+								// Check if linked bond op is already part of loop
+								if (!bondops_loop[linkedp]) {
+									// This SHOULD NOT happen, a mere safety measure
+									
+									// !!!! ?? fliploop = false;
+								}
+							} else if (linkops[linkedv] == 2) {
+								// This leg is linked to a spin op
+
+								visited[linkedv] = true;
+								
+								// Check if spin op is already part of loop
+								if (spinops_loop[linkedp]) {
+									// Spin op has already been added on different leg
+									fliploop = false;
+								} else {
+									// Spin op hasn't been added before
+								
+									// Add spin op to list of ops that should be flipped
+									
+									spinops_loop[linkedp] = true;
+								}
+							} else {
+								// This leg isn't connected to anything
+								fliploop = false;
+							}
+						} else {
+							// This leg isn't connected to anything
+							fliploop = false;
+						}
                     }
                 }
-            }
+			}
 
-            // Check if loop is flippable
+            // Check if loop should be flipped
             if (fliploop && uni_dist(rng) < 0.5) {
+
+				cont_out << "-- FLIPPABLE OPSTRING --\n";
+				for (int p = 0; p < effexporder; p++) {
+					cont_out << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
+				}
+				cont_out << "----\n";
+
                 // Loop is flippable
-                
+				//cout << "-----\n";
                 // Iterate over all spin ops and change type
                 for (int pi = 0; pi < effexporder; pi++) {
                     // Check if spin op is part of loop
                     if (spinops_loop[pi]) {
                         // Flip spin op
-						/* DEBUG
-						cout << p << "\t" << opstring[pi][0] << "\t"
+						// DEBUG
+						cont_out << pi << "\t" << opstring[pi][0] << "\t"
 							<< opstring[pi][1] << "\t"
 							<< opstring[pi][2] << "\t";
-						*/
-                        opstring[pi][0] = (opstring[pi][0] == 1) ? 2 : 1;
-						/* DEBUG
-						cout << opstring[pi][0] << "\t";
-						cout << "flip op\n";
-						*/
 
+                        opstring[pi][0] = (opstring[pi][0] == 1) ? 2 : 1;
+						// DEBUG
+						cont_out << opstring[pi][0] << "\t";
+						cont_out << "flip op\n";
+
+					// cout << "flip op\n";
                         // Set spin as part of flipped cluster
                         sp = opstring[pi][2];
                         free_spins[sp] = 2;
                     }
                 }
+
+				cont_out << "-- FLIPPED OPSTRING --\n";
+				for (int p = 0; p < effexporder; p++) {
+					cont_out << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
+				}
+				cont_out << "----\n";
+				//cout << "-----\n";
             } else {
 				// Loop isn't flipped
 				// ...
@@ -797,12 +948,15 @@ int cluster_updates(int spins[], int nspins, int bonds[][3],
 			}
 		} else if (free_spins[i] == 2) {
 			// Spin isn't free but is part of a cluster that has been flipped
-			spins[i] *= -1;
+			//spins[i] *= -1;
+			//cout << i << " flipped spin" << spins[i] << "\n";
 		}
 
 		// Reset free-ness of spin
 		free_spins[i] = 0;
 	}
+	
+	//cout << "sweep\n";
 
 	return 0;
 
@@ -829,8 +983,8 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 	// insertion probability
 	int ops_inserted, old_op = 0;
 	//double insert_prob = (newexporder-exporder)/(double)(newexporder+1);
-	//double insert_prob = 0.33;
-	double insert_prob = 0.67;
+	double insert_prob = 0.6;
+	//double insert_prob = 0.1;
 	//cout << insert_prob << "\n";
 
 	// Initialise variables
@@ -917,87 +1071,165 @@ int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
 	int nn_corrs[nspins] = {0};
 	double avg_corr;
 
-	// Iterate over all propagated states
-	for (int p = 0; p < effexporder; p++) {
-		// Check if current spin state is about to be changed,
-		// so to avoid including states between which there is
-		// only an identity
-		if (opstring[p][0] != 0) {
-			// Reset observables
-			magn = 0;
+	// Check if expansion order is zero to allow averaging
+	if (effexporder == 0) {
+	// if (true) {
+		// Get average of just periodic basis state
 
-			// Get observables of current state
+		// Reset observables
+		magn = 0;
 
-			// ----- Measure magnetisation -----
+		// Get observables of current state
 
-			// Iterate over all spins
-			for (int i = 0; i < nspins; i++) {
-				// Initial spin state
-				spin = spins_mod[i];
-				//cout << spin;
-				
-				/*
-				// For each spin, iterate over opstring
-				for (int p = 0; p < effexporder; p++) {
-					avg_magn += double(spin);
-					// Check if an off-diagonal operator is acting on this spin
-					if (opstring[p][0] == 2 && opstring[p][2] == i) {
-						spin = spin*(double)(-1);
-					}
-				}
-				*/
-				
-				// DEBUG
-				if (spin != spin) {
-					cout << "spin is nan" << "\n";
-				}
+		// ----- Measure magnetisation -----
 
-				magn += spin;
-			}
-
-			avg_magn += abs(magn)/(double)exporder;
-
-			// DEBUG
-			if (avg_magn != avg_magn) {
-				cout << "avg_magn is nan" << "\n";
-			}
-
-			avg_magn_sq += pow(magn, 2)/(double)exporder;
-			avg_magn_quad += pow(magn, 4)/(double)exporder;
+		// Iterate over all spins
+		for (int i = 0; i < nspins; i++) {
+			// Initial spin state
+			//spin = spins_mod[i];
+			//cout << spin;
 			
-			// ----- Find nearest neighbour spin-spin correlations -----
-
-			// Iterate over all bonds
-			for (int b = 0; b < nbonds; b++) {
-				// Get spins belonging to bond b
-				s1i = bonds[b][0];
-				s2i = bonds[b][1];
-
-				// Get spin states
-				s1 = spins_mod[s1i];
-				s2 = spins_mod[s2i];
-
-				// Add product to list
-				nn_corrs[s1i] = s1*s2;
-				nn_corrs[s2i] = s1*s2;
+			/*
+			// For each spin, iterate over opstring
+			for (int p = 0; p < effexporder; p++) {
+				avg_magn += double(spin);
+				// Check if an off-diagonal operator is acting on this spin
+				if (opstring[p][0] == 2 && opstring[p][2] == i) {
+					spin = spin*(double)(-1);
+				}
 			}
+			*/
+			
+			// DEBUG
+			/*
+			if (spin != spin) {
+				cout << "spin is nan" << "\n";
+			}*/
 
-			// Now iterate over all spins and get average correlation
-			total_corr = 0;
-			for (int s = 0; s < nspins; s++) {
-				total_corr += nn_corrs[s];
-			}
+			magn += spins_mod[i];
 		}
 
-		// Apply operators to state (propagate state)
-		if (opstring[p][0] == 2) {
-			// Operator acting is off-diagonal
-			if (opstring[p][2] > -1) {
-				// Operator is acting on spin
-				si = opstring[p][2];
+		avg_magn += abs(magn);
 
-				// Flip spin
-				spins_mod[si] *= -1;
+		/*
+		// DEBUG
+		if (avg_magn != avg_magn) {
+			cout << "avg_magn is nan" << "\n";
+		}
+		*/
+
+		avg_magn_sq += pow(magn, 2);
+		avg_magn_quad += pow(magn, 4);
+		
+		// ----- Find nearest neighbour spin-spin correlations -----
+
+		// Iterate over all bonds
+		for (int b = 0; b < nbonds; b++) {
+			// Get spins belonging to bond b
+			s1i = bonds[b][0];
+			s2i = bonds[b][1];
+
+			// Get spin states
+			s1 = spins_mod[s1i];
+			s2 = spins_mod[s2i];
+
+			// Add product to list
+			nn_corrs[s1i] = s1*s2;
+			nn_corrs[s2i] = s1*s2;
+		}
+
+		// Now iterate over all spins and get average correlation
+		total_corr = 0;
+		for (int s = 0; s < nspins; s++) {
+			total_corr += nn_corrs[s];
+		}
+	} else {
+		// Iterate over all propagated states
+		for (int p = 0; p < effexporder; p++) {
+			// Check if current spin state is about to be changed,
+			// so to avoid including states between which there is
+			// only an identity
+			if (opstring[p][0] != 0) {
+				// Reset observables
+				magn = 0;
+
+				// Get observables of current state
+
+				// ----- Measure magnetisation -----
+
+				// Iterate over all spins
+				for (int i = 0; i < nspins; i++) {
+					// Initial spin state
+					//spin = spins_mod[i];
+					//cout << spin;
+					
+					/*
+					// For each spin, iterate over opstring
+					for (int p = 0; p < effexporder; p++) {
+						avg_magn += double(spin);
+						// Check if an off-diagonal operator is acting on this spin
+						if (opstring[p][0] == 2 && opstring[p][2] == i) {
+							spin = spin*(double)(-1);
+						}
+					}
+					*/
+					
+					// DEBUG
+					/*
+					if (spin != spin) {
+						cout << "spin is nan" << "\n";
+					}
+					*/
+
+					magn += spins_mod[i];
+				}
+
+				avg_magn += abs(magn)/(double)exporder;
+
+				// DEBUG
+				if (avg_magn != avg_magn) {
+					cout << "avg_magn is nan" << "\n";
+				}
+
+				avg_magn_sq += pow(magn, 2)/(double)exporder;
+				avg_magn_quad += pow(magn, 4)/(double)exporder;
+				
+				// ----- Find nearest neighbour spin-spin correlations -----
+
+				// Iterate over all bonds
+				for (int b = 0; b < nbonds; b++) {
+					// Get spins belonging to bond b
+					s1i = bonds[b][0];
+					s2i = bonds[b][1];
+
+					// Get spin states
+					s1 = spins_mod[s1i];
+					s2 = spins_mod[s2i];
+
+					// Add product to list
+					nn_corrs[s1i] = s1*s2;
+					nn_corrs[s2i] = s1*s2;
+				}
+
+				// Now iterate over all spins and get average correlation
+				total_corr = 0;
+				for (int s = 0; s < nspins; s++) {
+					total_corr += nn_corrs[s];
+				}
+			}
+
+			// Apply operators to state (propagate state)
+			if (opstring[p][0] == 2) {
+				// Operator acting is off-diagonal
+
+				if (opstring[p][2] > -1) {
+					// Operator is acting on spin
+
+					si = opstring[p][2];
+
+					// Flip spin
+					spins_mod[si] *= -1;
+				}
 			}
 		}
 	}
