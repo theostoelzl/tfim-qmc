@@ -6,7 +6,9 @@
 	* *bins*: number of bins to average into
 	* *avsweeps*: number of averaging MC sweeps per bin per spin
 	* *max_expansion_order*: maximum series expansion order cutoff
-	* *temperature*: *kT*, temperature multiplied by the Boltzmann constant
-	* *transverse_field*: transverse field *h* in units of the coupling constant *J*
+	* *temperature* (obsolete): *kT*, temperature multiplied by the Boltzmann constant
+	* *transverse_field* (obsolete): transverse field *h* in units of the coupling constant *J*
 3. Compile *qmc.cpp*:
 	```g++ qmc.cpp -g -o qmc```
+4. Run executable with inline parameter:
+	```./qmc {output directoy} {temperature} {transverse field}```
