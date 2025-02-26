@@ -25,12 +25,12 @@ using namespace std;
 //      function separately
 
 int random_conf(int spins[], int nspins, mt19937 &rng);
-int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
+int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[], int nbonds,
 	int opstring[][3], int effexporder, double temp, double hfield, mt19937 &rng, ofstream &cont_out);
-int cluster_updates(int spins[], int nspins, int bonds[][3],
+int cluster_updates(int spins[], int nspins, int bonds[][2],
 	int nbonds, int opstring[][3], int effexporder, mt19937 &rng, ofstream &cont_out);
 int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng);
-int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
+int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	int opstring[][3], int effexporder, int obs_count, double obs_exporder[], 
 	double obs_exporder_sq[], double obs_magn[], double obs_magn_sq[], 
 	double obs_magn_quad[], double obs_nn_corr[]);
@@ -60,7 +60,8 @@ int main(int argc, char** argv) {
 
 	// Then, initialise arrays for all spins and bonds
 	int spins[nspins];
-	int bonds[nbonds][3];
+	int bonds[nbonds][2];
+	double couplings[nbonds];
 
 	// Read in bonds
 	string myline[4];
@@ -73,9 +74,9 @@ int main(int argc, char** argv) {
 		// Store spin indices and coupling constants in bonds array
 		bonds[l][0] = stoi(myline[1]);
 		bonds[l][1] = stoi(myline[2]);
-		bonds[l][2] = stoi(myline[3]);
+		couplings[l] = stod(myline[3]);
 
-		cout << bonds[l][0] << "\t" << bonds[l][1] << "\t" << bonds[l][2] << "\n";
+		cout << bonds[l][0] << "\t" << bonds[l][1] << "\t" << couplings[l] << "\n";
 	}
 
 	// ----- Read in simulation parameters -----
@@ -207,7 +208,7 @@ int main(int argc, char** argv) {
 		cont_out << "----------\n";
 
 		// Diagonal updates to insert / remove operators
-		diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
+		diagonal_updates(spins, nspins, bonds, couplings, nbonds, opstring, 
 				effexporder, temp, hfield, rng, cont_out);
 		
 		cont_out << "----- AFTER DIAGONAL SPINS -----\n";
@@ -299,7 +300,7 @@ int main(int argc, char** argv) {
 			cont_out.open("sweeps/cont_out_avg_"+to_string(j)+".txt");
 
 			// Diagonal updates to insert / remove operators
-			diagonal_updates(spins, nspins, bonds, nbonds, opstring, 
+			diagonal_updates(spins, nspins, bonds, couplings, nbonds, opstring, 
 					effexporder, temp, hfield, rng, cont_out);
 
 			// Cluster updates to vary diagonal / off-diagonal ops
@@ -396,7 +397,7 @@ int random_conf(int spins[], int nspins, mt19937 &rng) {
 	
 }
 
-int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
+int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[], int nbonds,
 	int opstring[][3], int effexporder, double temp, double hfield, mt19937 &rng, ofstream &cont_out) {
 
 	// Initialise random number generator
@@ -440,7 +441,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				s2 = spins[s2i];
 
 				// Get coupling constant of bond
-				bj = bonds[randb][2];	
+				bj = couplings[randb];	
 				
 				// Check if spins are parallel
 				// if bj < 0, anti-ferromagnetic bond
@@ -497,7 +498,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 				// Operator is acting on bonds
 				
 				// Get coupling constant of bond
-				bj = bonds[opstring[p][1]][2];
+				bj = couplings[opstring[p][1]];
 
 				// Evaluate acceptance probability
 				//paccept = 2*(effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // original (wrong!)
@@ -558,7 +559,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][3], int nbonds,
 	
 }
 
-int cluster_updates(int spins[], int nspins, int bonds[][3],
+int cluster_updates(int spins[], int nspins, int bonds[][2],
 	int nbonds, int opstring[][3], int effexporder, mt19937 &rng, ofstream &cont_out) {
 	
 	// Random stuff
@@ -1033,7 +1034,7 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 	
 }
 
-int measure_observables(int spins[], int nspins, int bonds[][3], int nbonds,
+int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	int opstring[][3], int effexporder, int obs_count, double obs_exporder[], 
 	double obs_exporder_sq[], double obs_magn[], double obs_magn_sq[], 
 	double obs_magn_quad[], double obs_nn_corr[]) {
