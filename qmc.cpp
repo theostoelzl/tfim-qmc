@@ -104,8 +104,8 @@ int main(int argc, char** argv) {
 	int bins = data["bins"];
 	int avsweeps = data["avsweeps"];
 	int maxexporder = data["max_expansion_order"];
-	double temp = data["temperature"];
-	double hfield = data["transverse_field"];
+	double temp = 0;
+	double hfield = 0;
 	// Overwrite using in-line arguments
 	temp = stod(argv[2]);
 	cout << "temp " << temp << "\n";
