@@ -1,4 +1,6 @@
-# Quantum Monte Carlo simulations of the transverse field Ising model
+# Quantum Monte Carlo simulations of the transverse field Ising model using the stochastic series expansion method
+
+## How to run this programme
 
 1. To generate an input file containing all bonds (*bonds.txt*), run
 	```python genlattice.py chain {n}```
