@@ -9,9 +9,8 @@
 	* *eqsweeps*: number of equilibration Monte Carlo (MC) sweeps per spin
 	* *bins*: number of bins to average into
 	* *avsweeps*: number of averaging MC sweeps per bin per spin
-	* *max_expansion_order*: maximum series expansion order cutoff
-	* *temperature* (obsolete): *kT*, temperature multiplied by the Boltzmann constant
-	* *transverse_field* (obsolete): transverse field *h* in units of the coupling constant *J*
+	* *max_expansion_order*: initial maximum series expansion order cutoff (this value must be 1 or greater,
+	but will be adapted automatically during equilibration)
 3. Compile *qmc.cpp*:
 	```g++ qmc.cpp -g -o qmc```
 4. Run executable with inline parameters:
