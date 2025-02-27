@@ -1,3 +1,20 @@
+/*
+
+Quantum Monte Carlo simulation of transverse-field
+Ising models by stochastic series expansion.
+
+(C) 2025 Theo Stölzl
+
+This software is licensed under the CC-BY-SA 4.0 license
+(https://creativecommons.org/licenses/by-sa/4.0/).
+
+This software contains a JSON interface class by
+Niels Lohmann under the MIT license (https://opensource.org/licenses/MIT).
+(C) 2013-2025 Niels Lohmann
+
+*/
+
+
 #include <iostream>
 #include <stdio.h>
 #include <cmath>
@@ -20,9 +37,9 @@ using namespace std;
 // 6 - J-coupling for individual bonds (DONE)
 // 7 - measuring observables (heat capacity !)
 // 8 - look into why max cutoff needs to be about 3x the mean expansion order?
-// 9 - averaging into bins
+// 9 - averaging into bins (DONE)
 // 10 - set up random functions for whole programme, not in each
-//      function separately
+//      function separately (DONE)
 
 int random_conf(int spins[], int nspins, mt19937 &rng);
 int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[], int nbonds,
@@ -169,7 +186,7 @@ int main(int argc, char** argv) {
 
 		// Read in opstring
 		string myline[3];
-		for (int l = 0; l < nspins; l++) {
+		for (int l = 0; l < effexporder; l++) {
 			for (int i = 0; i < 2; i++) {
 				getline(ops_infile, myline[i], '\t');
 			}
@@ -248,6 +265,30 @@ int main(int argc, char** argv) {
 		cont_out << "----------\n";
 		cont_out.close();
 
+		/*
+		// DEBUG
+		int counter_spin_flips[nspins] = {0};
+		int spini = 0;
+
+		// DEBUG
+		for (int x = 0; x < effexporder; x++) {
+			if (opstring[x][0] == 2) {
+				if (opstring[x][2] > -1) {
+					counter_spin_flips[opstring[x][2]]++;
+				} else {
+					cout << "ERROR\n";
+				}
+			}
+		}
+
+		for (int x = 0; x < nspins; x++) {
+			if (counter_spin_flips[x] % 2 != 0) {
+				cout << "ABORT at sweep " << i;
+				cout << " spin " << x << " " << counter_spin_flips[x]++;
+				exit(0);
+			}
+		}
+		*/
 	}
 
 	cout << "Finished equilibration." << "\n";
@@ -314,6 +355,30 @@ int main(int argc, char** argv) {
 
 			cont_out.close();
 
+			/*
+			// DEBUG
+			int counter_spin_flips[nspins] = {0};
+			int spini = 0;		
+
+			// DEBUG
+			for (int x = 0; x < effexporder; x++) {
+				if (opstring[x][0] == 2) {
+					if (opstring[x][2] > -1) {
+						counter_spin_flips[opstring[x][2]]++;
+					} else {
+						cout << "ERROR\n";
+					}
+				}
+			}
+
+			for (int x = 0; x < nspins; x++) {
+				if (counter_spin_flips[x] % 2 != 0) {
+					cout << "ABORT at sweep e" << n << " " << j;
+					exit(0);
+				}
+			}
+			*/
+
 		}
 
 		// Now average over bin and add to big arrays
@@ -329,7 +394,7 @@ int main(int argc, char** argv) {
 		out_file << to_string(n)+","+to_string(obs_exporder[n])+","+to_string(obs_exporder_sq[n])+","
 				+to_string(obs_magn[n])+","+to_string(obs_magn_sq[n])+","+to_string(obs_magn_quad[n])+","
 				+to_string(obs_nn_corr[n])+"\n" << flush;
-
+	
 	}
 
 	out_file.close();
@@ -374,8 +439,8 @@ int main(int argc, char** argv) {
 	ops_out.open("opstring.txt");
 	ops_out << effexporder << "\n";
 	for (int p = 0; p < effexporder; p++) {
-		ops_out << opstring[p][0] << "\t" 
-			<< opstring[p][1] << "\t" 
+		ops_out << opstring[p][0] << "\t"
+			<< opstring[p][1] << "\t"
 			<< opstring[p][2] << "\n";
 	}
 	ops_out.close();
@@ -542,6 +607,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 		}
 	}
 
+	/* DEBUG
 	// How many bond ops?
 	int count_bond = 0;
 	int count_sp = 0;
@@ -554,6 +620,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 		}
 	}
 	// cout << count_bond << " bond ops\t" << count_sp << " spin ops\n";
+	*/
 
 	return 0;
 	
@@ -713,6 +780,8 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 		// 1 - spin isn't free but it isn't part of any
 		//     flipped loop
 		// 2 - spin isn't free and it's part of a flipped loop
+		// (currently only items with value 2 are used, so might
+		// convert this to a bool array)
 		free_spins[i] = 0;
 	}
 	double coin;
@@ -733,7 +802,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
             if (linkops[currentv] == 1) {
                 // Initial leg belongs to bond op
 
-				// !! visited[v] = true; ??
+				visited[currentv] = true;
 
                 // Get opstring index
                 p = floor(currentv/(double)4);
@@ -743,37 +812,40 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
             } else if (linkops[currentv] == 2) {
                 // Initial leg belongs to spin op
 
-                visited[v] = true;
+                visited[currentv] = true;
 
                 // Get linked leg
                 linkedv = links[currentv];
                 
-                // Check type of operator this leg is linked to
-                if (linkops[linkedv] == 1) {
-                    // Linked to bond op
-                    currentv = linkedv;
+				// Check if this operator is linked to anything
+				if (linkedv > -1) {
+					// Check type of operator this leg is linked to
+					if (linkops[linkedv] == 1) {
+						// Linked to bond op
+						currentv = linkedv;
 
-                    // Get opstring index
-                    p = floor(currentv/(double)4);
-                    
-                    // Operator is part of loop
-                    bondops_loop[p] = true;
-                } else if (linkops[linkedv] == 2) {
-                    // Linked to spin op
+						// Get opstring index
+						p = floor(currentv/(double)4);
+						
+						// Operator is part of loop
+						bondops_loop[p] = true;
+					} else if (linkops[linkedv] == 2) {
+						// Linked to spin op
 
-                    visited[linkedv] = true;
+						visited[linkedv] = true;
 
-                    // Get op indices belonging to this cluster
-                    p = floor(currentv/(double)4);
-                    linkedp = floor(linkedv/(double)4);
-                    
-                    // Set ops flippable
-                    spinops_loop[p] = true;
-                    spinops_loop[linkedp] = true;
+						// Get op indices belonging to this cluster
+						p = floor(currentv/(double)4);
+						linkedp = floor(linkedv/(double)4);
+						
+						// Set ops flippable
+						spinops_loop[p] = true;
+						spinops_loop[linkedp] = true;
 
-                    // Stop further loop from happening
-                    cont = false;
-                }
+						// Stop further loop from happening
+						cont = false;
+					}
+				}
             }
             
 			// Traverse loop
@@ -784,7 +856,6 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
                 // Iterate over all operators
                 for (int pi = 0; pi < effexporder; pi++) {
                     if (bondops_loop[pi]) {
-
                         // Iterate over legs of op
                         // Go through legs belonging to bond op
                         for (int i = 0; i < 4; i++) {
@@ -800,8 +871,6 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 								linkedp = floor(linkedv/(double)4);
 								// Check if this linked op is a bond op
 								if (linkops[linkedv] == 1) {
-									
-							
 									// Check if bond op is already part of loop
 									if (!bondops_loop[linkedp]) {
 										// Bond op hasn't been added yet, so add it
@@ -844,11 +913,11 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
                         linkedp = floor(linkedv/(double)4);
 
 						// Only proceed if this leg is linked to anything
-						if (linkedv != -1) {
-							// !! why do what's below ??
-
+						if (linkedv > -1) {
 							// Check if this linked op is a bond op or spin op
 							if (linkops[linkedv] == 1) {
+								// !! why do what's below ??
+
 								// Check if linked bond op is already part of loop
 								if (!bondops_loop[linkedp]) {
 									// This SHOULD NOT happen, a mere safety measure
@@ -885,12 +954,25 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 
             // Check if loop should be flipped
             if (fliploop && uni_dist(rng) < 0.5) {
+				
+				// DEBUG
+				int counter_spin_flips[nspins] = {0};
+				int spini = 0;
+				
+				string output = "";
 
 				cont_out << "-- FLIPPABLE OPSTRING --\n";
 				for (int p = 0; p < effexporder; p++) {
 					cont_out << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
 				}
 				cont_out << "----\n";
+
+				output += "-- FLIPPABLE OPSTRING --\n";
+				for (int p = 0; p < effexporder; p++) {
+					output += to_string(p) + "\t" + to_string(opstring[p][0]) + "\t" 
+						+ to_string(opstring[p][1]) + "\t" + to_string(opstring[p][2]) + "\n";
+				}
+				output += "----\n";
 
                 // Loop is flippable
 				//cout << "-----\n";
@@ -905,9 +987,16 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 							<< opstring[pi][2] << "\t";
 
                         opstring[pi][0] = (opstring[pi][0] == 1) ? 2 : 1;
+
+						// DEBUG
+						spini = opstring[pi][2];
+
+						counter_spin_flips[spini]++;
 						// DEBUG
 						cont_out << opstring[pi][0] << "\t";
 						cont_out << "flip op\n";
+
+						output += "flip op " + to_string(pi) + "\n";
 
 					// cout << "flip op\n";
                         // Set spin as part of flipped cluster
@@ -922,6 +1011,27 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 				}
 				cont_out << "----\n";
 				//cout << "-----\n";
+
+				/*
+				// DEBUG
+				for (int x = 0; x < nspins; x++) {
+					if (counter_spin_flips[x] % 2 != 0) {
+						ofstream outputf;
+						outputf.open("errors_"+to_string(effexporder)+".txt");
+						outputf << output;
+						outputf << "-- FLIPPED OPSTRING --\n";
+						for (int p = 0; p < effexporder; p++) {
+							outputf << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
+						}
+						outputf << "----\n";
+						outputf.close();
+
+						cout << "ABORT";
+						exit(0);
+					}
+				}
+				*/
+
             } else {
 				// Loop isn't flipped
 				// ...
