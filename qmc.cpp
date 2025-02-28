@@ -1087,14 +1087,14 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 	}
 
 	// Initialise new expansion order
-	int newexporder = 0;
+	int newexporder = 1;
 	//cout << exporder << " " << newexporder << "\n";
 
 	// To distribute operators in new opstring evenly, define
 	// insertion probability
 	int ops_inserted, old_op = 0;
 	//double insert_prob = (newexporder-exporder)/(double)(newexporder+1);
-	double insert_prob = 0.6;
+	double insert_prob = 0.2;
 	//double insert_prob = 0.1;
 	//cout << insert_prob << "\n";
 
@@ -1131,7 +1131,9 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 		}
 	}
 
-	newexporder = opcount;
+	// If no operators are in the opstring, set the new exporder
+	// as 1
+	newexporder = (opcount > 0) ? opcount : 1;
 	//cout << newexporder << "\n";
 
 	for (int p = 0; p < newexporder; p++) {
