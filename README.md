@@ -29,13 +29,4 @@ configuration file (*setup.txt*) containing details such as the number of sweeps
 
 ## Equilibration issues
 
-## Licenses
-
-(C) 2025 Theo Stölzl
-
-This software is published under the GNU GPLv3 license
-(https://www.gnu.org/licenses/gpl-3.0.en.html).
-
-This software contains a JSON interface class by
-Niels Lohmann under the MIT license (https://opensource.org/licenses/MIT).
-(C) 2013-2025 Niels Lohmann
+...
