@@ -5,8 +5,8 @@ Ising models by stochastic series expansion.
 
 (C) 2025 Theo Stölzl
 
-This software is licensed under the CC-BY-SA 4.0 license
-(https://creativecommons.org/licenses/by-sa/4.0/).
+This software is published under the GNU GPLv3 license
+(https://www.gnu.org/licenses/gpl-3.0.en.html).
 
 This software contains a JSON interface class by
 Niels Lohmann under the MIT license (https://opensource.org/licenses/MIT).
@@ -50,7 +50,7 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng);
 int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	int opstring[][3], int effexporder, int obs_count, double obs_exporder[], 
 	double obs_exporder_sq[], double obs_magn[], double obs_magn_sq[], 
-	double obs_magn_quad[], double obs_nn_corr[]);
+	double obs_magn_quad[], double obs_corr[500][500]);
 
 int main(int argc, char** argv) {
 
@@ -93,8 +93,12 @@ int main(int argc, char** argv) {
 		bonds[l][1] = stoi(myline[2]);
 		couplings[l] = stod(myline[3]);
 
-		cout << bonds[l][0] << "\t" << bonds[l][1] << "\t" << couplings[l] << "\n";
+		if (l < 10) {
+			cout << bonds[l][0] << "\t" << bonds[l][1] << "\t" << couplings[l] << "\n";
+		}
 	}
+
+	cout << "...\n";
 
 	// ----- Read in simulation parameters -----
 
@@ -192,7 +196,7 @@ int main(int argc, char** argv) {
 			}
 			getline(ops_infile, myline[2], '\n');
 
-			// Set opstring
+			// Set operator
 			opstring[l][0] = stoi(myline[0]);
 			opstring[l][1] = stoi(myline[1]);
 			opstring[l][2] = stoi(myline[2]);
@@ -299,7 +303,7 @@ int main(int argc, char** argv) {
 	// Open output file
 	ofstream out_file; 
 	out_file.open(out_path+"/results_t_"+to_string(temp)+"_h_"+to_string(hfield)+".csv");
-	out_file << "bin,exporder,exporder_sq,magn,magn_sq,magn_quad,nn_corr\n";
+	out_file << "bin,exporder,exporder_sq,magn,magn_sq,magn_quad\n";
 	
 	// Setup for measuring observables
 	double obs_exporder[bins];
@@ -307,25 +311,24 @@ int main(int argc, char** argv) {
 	double obs_magn[bins];
 	double obs_magn_sq[bins];
 	double obs_magn_quad[bins];
-	double obs_nn_corr[bins];
+	double obs_corr[500][500] = {0};
 	for (int n = 0; n < bins; n++) {
 		obs_exporder[n] = 0;
 		obs_exporder_sq[n] = 0;
 		obs_magn[n] = 0;
 		obs_magn_sq[n] = 0;
 		obs_magn_quad[n] = 0;
-		obs_nn_corr[n] = 0;
 	}
 	
 	// Start averaging sweeps
 	for (int n = 0; n < bins; n++) {
 		
-		double obs_exporder_bin[avsweeps];
-		double obs_exporder_sq_bin[avsweeps];
-		double obs_magn_bin[avsweeps];
-		double obs_magn_sq_bin[avsweeps];
-		double obs_magn_quad_bin[avsweeps];
-		double obs_nn_corr_bin[avsweeps];
+		double obs_exporder_bin[avsweeps] = {0};
+		double obs_exporder_sq_bin[avsweeps] = {0};
+		double obs_magn_bin[avsweeps] = {0};
+		double obs_magn_sq_bin[avsweeps] = {0};
+		double obs_magn_quad_bin[avsweeps] = {0};
+		/*
 		for (int k = 0; k < avsweeps; k++) {
 			obs_exporder_bin[k] = 0;
 			obs_exporder_sq_bin[k] = 0; 
@@ -333,7 +336,9 @@ int main(int argc, char** argv) {
 			obs_magn_sq_bin[k] = 0;
 			obs_magn_quad_bin[k] = 0;
 			obs_nn_corr_bin[k] = 0;
+			obs_corr_bin[k] = 0;
 		}
+		*/
 
 		for (int j = 0; j < avsweeps; j++) {
 
@@ -351,7 +356,7 @@ int main(int argc, char** argv) {
 			measure_observables(spins, nspins, bonds, nbonds, opstring,
 					effexporder, j, obs_exporder_bin, obs_exporder_sq_bin,
 					obs_magn_bin, obs_magn_sq_bin, obs_magn_quad_bin,
-					obs_nn_corr_bin);
+					obs_corr);
 
 			cont_out.close();
 
@@ -388,40 +393,47 @@ int main(int argc, char** argv) {
 			obs_magn[n] += obs_magn_bin[j]/(double)avsweeps;
 			obs_magn_sq[n] += obs_magn_sq_bin[j]/(double)avsweeps;
 			obs_magn_quad[n] += obs_magn_quad_bin[j]/(double)avsweeps;
-			obs_nn_corr[n] += obs_nn_corr_bin[j]/(double)avsweeps;
 		}
-		
+
+		// Write observables to output file
 		out_file << to_string(n)+","+to_string(obs_exporder[n])+","+to_string(obs_exporder_sq[n])+","
-				+to_string(obs_magn[n])+","+to_string(obs_magn_sq[n])+","+to_string(obs_magn_quad[n])+","
-				+to_string(obs_nn_corr[n])+"\n" << flush;
-	
+				+to_string(obs_magn[n])+","+to_string(obs_magn_sq[n])+","+to_string(obs_magn_quad[n]) + "\n" << flush;
 	}
 
 	out_file.close();
+
+	// Write spin-spin correlations to dedicated file
+	ofstream corrs_file;
+	corrs_file.open(out_path+"/corrs_t_"+to_string(temp)+"_h_"+to_string(hfield)+".dat");
+	corrs_file << nspins << "\n";
+	for (int si = 0; si < nspins; si++) {
+		for (int sj = 0; sj < nspins; sj++) {
+			corrs_file << obs_corr[si][sj]/(double)(avsweeps*bins) << "\t";
+		}
+		corrs_file << "\n";
+	}
 
 	cout << "Finished averaging." << "\n";
 	cout << flush;
 	
 	// Find average observables
-	double avgn = 0, avgcorr;
+	double avgn = 0;
 	avgm = 0;
 	for (int n = 0; n < bins; n++) {
 		avgn += obs_exporder[n]/(double)(bins);
 		//cout << obs_magn[n] << "\n";
 
 		avgm += obs_magn[n]/(double)(bins);
-		avgcorr += obs_nn_corr[n]/(double)(bins);
 	}
 	
 	cout << "average expansion order: " << avgn << "\n";
 	cout << "average magnetisation: " << avgm << "\n";
-	cout << "average nn correlation: " << avgcorr << "\n";
 	
 	/*
 	for (int i = 0; i < nspins; i++) {
 		cout << spins[i] << "\t"; 
 		if (i%16 == 0) {
-			cout << "\n"; 
+			cout << "\n";
 		}
 	}
 	*/
@@ -506,7 +518,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				s2 = spins[s2i];
 
 				// Get coupling constant of bond
-				bj = couplings[randb];	
+				bj = couplings[randb];
 				
 				// Check if spins are parallel
 				// if bj < 0, anti-ferromagnetic bond
@@ -515,7 +527,9 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 					// Spins are arranged correctly so try to insert diagonal operator
 					// paccept = (1/temp) * nbonds * bj /(double) (2*(effexporder - exporder)); // original (wrong!)
 					// paccept = (1/temp) * nbonds * bj /(double) (effexporder - exporder); // fixed (spin 1/2)
-					paccept = (1/temp) * 2 * nbonds * 2 * bj /(double) (effexporder - exporder); // spin 1
+					
+					// paccept = (1/temp) * 2 * nbonds * 2 * abs(bj) /(double) (effexporder - exporder); // Pauli matrices
+					paccept = (1/temp) * nbonds * abs(bj) /(double) (effexporder - exporder); // spin 1/2
 					
 						//cout << "in" << exporder << "\t" << effexporder << "\t" << 1/temp 
 								//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
@@ -538,7 +552,9 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				
 				// Evaluate acceptance probability
 				//paccept = (1/temp) * nspins * hfield /(double) (effexporder - exporder);
-				paccept = (1/temp) * 2 * nspins * hfield /(double) (effexporder - exporder);
+				
+				//paccept = (1/temp) * 2 * nspins * hfield /(double) (effexporder - exporder); // Pauli matrices
+				paccept = (1/temp) * nspins * hfield /(double) (effexporder - exporder); // spin 1/2
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -568,7 +584,9 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				// Evaluate acceptance probability
 				//paccept = 2*(effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // original (wrong!)
 				// paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // spin 1/2
-				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nbonds * 2 * bj); // spin 1
+
+				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nbonds * 2 * abs(bj)); // Pauli matrices
+				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * abs(bj)); // spin 1/2
 
 				//cout << "out" << exporder << "\t" << effexporder << "\t" << 1/temp 
 						//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
@@ -586,7 +604,9 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				
 				// Evaluate acceptance probability
 				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * hfield);
-				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nspins * hfield);
+				
+				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nspins * hfield); // Pauli matrices
+				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * hfield); // spin 1/2
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -599,7 +619,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 			}
 		} else {
 			// Off-diagonal operator
-			
+
 			// Modify spin according to opstring
 			si = opstring[p][2];
 			spins[si] *= -1;
@@ -649,7 +669,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 	// List of operator types each vertex leg belongs to
 	int linkops[4*effexporder];
 	for (int i = 0; i < 4*effexporder; i++) {
-		// This encodes the type of operator each 
+		// This encodes the type of operator each
 		// vertex leg belongs too
 		// 0 - identity op
 		// 1 - bond op
@@ -1094,12 +1114,24 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 	// insertion probability
 	int ops_inserted, old_op = 0;
 	//double insert_prob = (newexporder-exporder)/(double)(newexporder+1);
-	double insert_prob = 0.2;
+	double insert_prob = 0;
+	if (exporder < 100) {
+		// This might be necessary to account for fluctuations
+		// in expansion order at high T and low expansion orders
+		insert_prob = 0.1;
+	} else {
+		insert_prob = 0.67;
+	}
 	//double insert_prob = 0.1;
 	//cout << insert_prob << "\n";
 
 	// Initialise variables
 	int newopstring[100000][3];
+	for (int p = 0; p < 100000; p++) {
+		newopstring[p][0] = 0;
+		newopstring[p][1] = -1;
+		newopstring[p][2] = -1;
+	}
 	int opcount = 0;
 	bool op_inserted;
 
@@ -1133,7 +1165,7 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 
 	// If no operators are in the opstring, set the new exporder
 	// as 1
-	newexporder = (opcount > 0) ? opcount : 1;
+	newexporder = (opcount > 0) ? opcount : 10;
 	//cout << newexporder << "\n";
 
 	for (int p = 0; p < newexporder; p++) {
@@ -1149,7 +1181,7 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	int opstring[][3], int effexporder, int obs_count, double obs_exporder[], 
 	double obs_exporder_sq[], double obs_magn[], double obs_magn_sq[], 
-	double obs_magn_quad[], double obs_nn_corr[]) {
+	double obs_magn_quad[], double obs_corr[500][500]) {
 
 	// ----- Measure internal energy (prop. to expansion order) -----
 
@@ -1181,168 +1213,98 @@ int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 
 	// Initialise variables
 	int s1i, s1, s2i, s2, total_corr = 0;
-	int nn_corrs[nspins] = {0};
+	int corrs[nspins][nspins] = {0};
 	double avg_corr;
+	bool zerops = false;
+	int iterations = effexporder;
+	int divideby = exporder;
 
 	// Check if expansion order is zero to allow averaging
-	if (effexporder == 0) {
-	// if (true) {
-		// Get average of just periodic basis state
+	// loop to work if it is
+	if (exporder == 0) {
+		zerops = true;
+		iterations = 1;
+		divideby = 1;
+	}
 
-		// Reset observables
-		magn = 0;
+	for (int p = 0; p < iterations; p++) {
+					//cout << "loop1";
+		// Check if current spin state is about to be changed,
+		// (or if there the opstring is empty)
+		// so to avoid including states between which there is
+		// only an identity
+		if (opstring[p][0] != 0 || zerops) {
+			// Reset observables
+			magn = 0;
 
-		// Get observables of current state
+			// Get observables of current state
 
-		// ----- Measure magnetisation -----
+			// ----- Measure magnetisation -----
 
-		// Iterate over all spins
-		for (int i = 0; i < nspins; i++) {
-			// Initial spin state
-			//spin = spins_mod[i];
-			//cout << spin;
-			
-			/*
-			// For each spin, iterate over opstring
-			for (int p = 0; p < effexporder; p++) {
-				avg_magn += double(spin);
-				// Check if an off-diagonal operator is acting on this spin
-				if (opstring[p][0] == 2 && opstring[p][2] == i) {
-					spin = spin*(double)(-1);
-				}
-			}
-			*/
-			
-			// DEBUG
-			/*
-			if (spin != spin) {
-				cout << "spin is nan" << "\n";
-			}*/
-
-			magn += spins_mod[i];
-		}
-
-		avg_magn += abs(magn);
-
-		/*
-		// DEBUG
-		if (avg_magn != avg_magn) {
-			cout << "avg_magn is nan" << "\n";
-		}
-		*/
-
-		avg_magn_sq += pow(magn, 2);
-		avg_magn_quad += pow(magn, 4);
-		
-		// ----- Find nearest neighbour spin-spin correlations -----
-
-		// Iterate over all bonds
-		for (int b = 0; b < nbonds; b++) {
-			// Get spins belonging to bond b
-			s1i = bonds[b][0];
-			s2i = bonds[b][1];
-
-			// Get spin states
-			s1 = spins_mod[s1i];
-			s2 = spins_mod[s2i];
-
-			// Add product to list
-			nn_corrs[s1i] = s1*s2;
-			nn_corrs[s2i] = s1*s2;
-		}
-
-		// Now iterate over all spins and get average correlation
-		total_corr = 0;
-		for (int s = 0; s < nspins; s++) {
-			total_corr += nn_corrs[s];
-		}
-	} else {
-		// Iterate over all propagated states
-		for (int p = 0; p < effexporder; p++) {
-			// Check if current spin state is about to be changed,
-			// so to avoid including states between which there is
-			// only an identity
-			if (opstring[p][0] != 0) {
-				// Reset observables
-				magn = 0;
-
-				// Get observables of current state
-
-				// ----- Measure magnetisation -----
-
-				// Iterate over all spins
-				for (int i = 0; i < nspins; i++) {
-					// Initial spin state
-					//spin = spins_mod[i];
-					//cout << spin;
-					
-					/*
-					// For each spin, iterate over opstring
-					for (int p = 0; p < effexporder; p++) {
-						avg_magn += double(spin);
-						// Check if an off-diagonal operator is acting on this spin
-						if (opstring[p][0] == 2 && opstring[p][2] == i) {
-							spin = spin*(double)(-1);
-						}
-					}
-					*/
-					
-					// DEBUG
-					/*
-					if (spin != spin) {
-						cout << "spin is nan" << "\n";
-					}
-					*/
-
-					magn += spins_mod[i];
-				}
-
-				avg_magn += abs(magn)/(double)exporder;
-
-				// DEBUG
-				if (avg_magn != avg_magn) {
-					cout << "avg_magn is nan" << "\n";
-				}
-
-				avg_magn_sq += pow(magn, 2)/(double)exporder;
-				avg_magn_quad += pow(magn, 4)/(double)exporder;
+			// Iterate over all spins
+			for (int i = 0; i < nspins; i++) {
+				// Initial spin state
+				//spin = spins_mod[i];
+				//cout << spin;
 				
-				// ----- Find nearest neighbour spin-spin correlations -----
+				/*
+				// For each spin, iterate over opstring
+				for (int p = 0; p < effexporder; p++) {
+					avg_magn += double(spin);
+					// Check if an off-diagonal operator is acting on this spin
+					if (opstring[p][0] == 2 && opstring[p][2] == i) {
+						spin = spin*(double)(-1);
+					}
+				}
+				*/
+				
+				// DEBUG
+				/*
+				if (spin != spin) {
+					cout << "spin is nan" << "\n";
+				}
+				*/
 
-				// Iterate over all bonds
-				for (int b = 0; b < nbonds; b++) {
-					// Get spins belonging to bond b
-					s1i = bonds[b][0];
-					s2i = bonds[b][1];
+				magn += spins_mod[i];
+			}
 
+			avg_magn += abs(magn)/(double)divideby;
+
+			// DEBUG
+			if (avg_magn != avg_magn) {
+				cout << "avg_magn is nan" << "\n";
+			}
+
+			avg_magn_sq += pow(magn, 2)/(double)divideby;
+			avg_magn_quad += pow(magn, 4)/(double)divideby;
+			
+			// ----- Find spin-spin correlations -----
+
+			// Iterate over all spin pairs
+			for (int s1i = 0; s1i < nspins; s1i++) {
+				for (int s2i = 0; s2i < s1i; s2i++) {
 					// Get spin states
 					s1 = spins_mod[s1i];
 					s2 = spins_mod[s2i];
 
 					// Add product to list
-					nn_corrs[s1i] = s1*s2;
-					nn_corrs[s2i] = s1*s2;
-				}
-
-				// Now iterate over all spins and get average correlation
-				total_corr = 0;
-				for (int s = 0; s < nspins; s++) {
-					total_corr += nn_corrs[s];
+					obs_corr[s1i][s2i] += s1*s2/(double)divideby;
+					obs_corr[s2i][s1i] += s1*s2/(double)divideby;
 				}
 			}
+		}
 
-			// Apply operators to state (propagate state)
-			if (opstring[p][0] == 2) {
-				// Operator acting is off-diagonal
+		// Apply operators to state (propagate state)
+		if (opstring[p][0] == 2) {
+			// Operator acting is off-diagonal
 
-				if (opstring[p][2] > -1) {
-					// Operator is acting on spin
+			if (opstring[p][2] > -1) {
+				// Operator is acting on spin
 
-					si = opstring[p][2];
+				si = opstring[p][2];
 
-					// Flip spin
-					spins_mod[si] *= -1;
-				}
+				// Flip spin
+				spins_mod[si] *= -1;
 			}
 		}
 	}
@@ -1351,12 +1313,8 @@ int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	// Get averages and add to lists
 	//avg_magn = avg_magn/(double)(nspins); //*effexporder);
 	obs_magn[obs_count] = avg_magn/(double)nspins; // abs(avg_magn);
-	obs_magn_sq[obs_count] = avg_magn_sq/(double)nspins;
-	obs_magn_quad[obs_count] = avg_magn_quad/(double)nspins;
-
-	// Normalise correlation and add to list
-	avg_corr = total_corr/(double)(exporder*nspins);
-	obs_nn_corr[obs_count] = avg_corr;
+	obs_magn_sq[obs_count] = avg_magn_sq/(double)pow(nspins, 2);
+	obs_magn_quad[obs_count] = avg_magn_quad/(double)pow(nspins, 4);
 
 	// Need to implement more observables
 	// ...
