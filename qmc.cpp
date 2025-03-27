@@ -43,14 +43,18 @@ using namespace std;
 
 int random_conf(int spins[], int nspins, mt19937 &rng);
 int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[], int nbonds,
-	int opstring[][3], int effexporder, double temp, double hfield, mt19937 &rng, ofstream &cont_out);
+	int opstring[][3], int effexporder, double temp, double transfield, double longfield, 
+	bool use_pauli_ops, mt19937 &rng);
+int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
+	int nbonds, int opstring[][3], int effexporder, mt19937 &rng);
 int cluster_updates(int spins[], int nspins, int bonds[][2],
-	int nbonds, int opstring[][3], int effexporder, mt19937 &rng, ofstream &cont_out);
+	int nbonds, int opstring[][3], int effexporder, mt19937 &rng);
 int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng);
 int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
-	int opstring[][3], int effexporder, int obs_count, double obs_exporder[], 
-	double obs_exporder_sq[], double obs_magn[], double obs_magn_sq[], 
-	double obs_magn_quad[], double obs_corr[500][500]);
+	int opstring[][3], int effexporder, double temp, double transfield, 
+	int obs_count, double obs_exporder[], double obs_exporder_sq[], double obs_magn[], 
+	double obs_magn_sq[], double obs_magn_quad[], double obs_trans_magn[], 
+	double obs_trans_magn_sq[], double obs_corr[500][500]);
 
 int main(int argc, char** argv) {
 
@@ -62,7 +66,7 @@ int main(int argc, char** argv) {
 	// ----- Read in bonds from input file -----
 
 	// Open input file containing bonds
-	ifstream bonds_infile; 
+	ifstream bonds_infile;
 	bonds_infile.open("bonds.txt");
 
 	// Read in number of spins and bonds
@@ -107,15 +111,19 @@ int main(int argc, char** argv) {
 	int eqsweeps = data["eqsweeps"];
 	int bins = data["bins"];
 	int avsweeps = data["avsweeps"];
-	int maxexporder = data["max_expansion_order"];
+	string op_mode = data["operator_mode"];
+	bool use_pauli_ops = (op_mode == "pauli") ? true : false;
 	double temp = 0;
-	double hfield = 0;
+	double transfield = 0;
+	double longfield = 0;
 	// Overwrite using in-line arguments
+	string out_path = argv[1];
 	temp = stod(argv[2]);
 	cout << "temp " << temp << "\n";
-	hfield = stod(argv[3]);
-	cout << "field " << hfield << "\n";
-	string out_path = argv[1];
+	transfield = stod(argv[3]);
+	cout << "transverse field " << transfield << "\n";
+	longfield = stod(argv[4]);
+	cout << "longitudinal field " << longfield << "\n";
 	
 	f.close();
 
@@ -129,7 +137,6 @@ int main(int argc, char** argv) {
 	ifstream spins_infile;
 	spins_infile.open("spins.txt");
 	if (spins_infile.good()) {
-
 		// Read in spins
 		string spin_in;
 		for (int l = 0; l < nspins; l++) {
@@ -154,6 +161,7 @@ int main(int argc, char** argv) {
 	// ----- Start Monte Carlo sweeps -----
 
 	// Set initial truncated (effective) expansion order
+	int maxexporder = 10;
 	int effexporder = maxexporder;
 
 	// Initialise operator string
@@ -170,6 +178,7 @@ int main(int argc, char** argv) {
 		// 0 - identity op
 		// 1 - diagonal op
 		// 2 - off-diagonal op
+		// 3 - longitudinal field op
 		opstring[p][0] = 0;
 		// If operator is acting bonds, this contains bond index
 		// otherwise it's -1
@@ -210,89 +219,20 @@ int main(int argc, char** argv) {
 	// Start equilibration
 	for (int i = 0; i < eqsweeps; i++) {
 
-		ofstream cont_out; 
-		cont_out.open("sweeps/cont_out_"+to_string(i)+".txt");
-		
-		cont_out << "===== BEGIN SWEEP =====\n\n";
-
-		// Debug spins
-		cont_out << "----- BEFORE SPINS -----\n";
-		for (int s = 0; s < nspins; s++) {
-			cont_out << spins[s] << "\n";
-		}
-		cont_out << "----------\n";
-
-		cont_out << "----- BEFORE OPSTRING -----\n";
-		for (int p = 0; p < effexporder; p++) {
-			cont_out << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
-		}
-		cont_out << "----------\n";
-
 		// Diagonal updates to insert / remove operators
 		diagonal_updates(spins, nspins, bonds, couplings, nbonds, opstring, 
-				effexporder, temp, hfield, rng, cont_out);
+				effexporder, temp, transfield, longfield, use_pauli_ops, rng);
 		
-		cont_out << "----- AFTER DIAGONAL SPINS -----\n";
-		for (int s = 0; s < nspins; s++) {
-			cont_out << spins[s] << "\n";
+		if (longfield == 0) {
+			flip_spin_clusters(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 		}
-		cont_out << "----------\n";
-		
+
 		// Cluster updates to vary diagonal / off-diagonal ops
-		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng, cont_out);
+		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 		
 		// Adjust largest expansion order
 		effexporder = adjust_maxexporder(opstring, effexporder, rng);
-		//cout << "max exp order: " << effexporder << "\n";
-		//effexporder = maxexporder;
 
-	/*
-				cout << "\n";
-			for (int p = 0; p < effexporder; p++) {
-				cout << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
-			}
-
-			cout << "\n\n";
-	*/
-
-		// Debug spins
-		cont_out << "----- AFTER SPINS -----\n";
-		for (int s = 0; s < nspins; s++) {
-			cont_out << spins[s] << "\n";
-		}
-		cont_out << "----------\n";
-
-		cont_out << "----- AFTER OPSTRING -----\n";
-		for (int p = 0; p < effexporder; p++) {
-			cont_out << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
-		}
-		cont_out << "----------\n";
-		cont_out.close();
-
-		/*
-		// DEBUG
-		int counter_spin_flips[nspins] = {0};
-		int spini = 0;
-
-		// DEBUG
-		for (int x = 0; x < effexporder; x++) {
-			if (opstring[x][0] == 2) {
-				if (opstring[x][2] > -1) {
-					counter_spin_flips[opstring[x][2]]++;
-				} else {
-					cout << "ERROR\n";
-				}
-			}
-		}
-
-		for (int x = 0; x < nspins; x++) {
-			if (counter_spin_flips[x] % 2 != 0) {
-				cout << "ABORT at sweep " << i;
-				cout << " spin " << x << " " << counter_spin_flips[x]++;
-				exit(0);
-			}
-		}
-		*/
 	}
 
 	cout << "Finished equilibration." << "\n";
@@ -302,23 +242,18 @@ int main(int argc, char** argv) {
 
 	// Open output file
 	ofstream out_file; 
-	out_file.open(out_path+"/results_t_"+to_string(temp)+"_h_"+to_string(hfield)+".csv");
-	out_file << "bin,exporder,exporder_sq,magn,magn_sq,magn_quad\n";
+	out_file.open(out_path+"/results_t_"+to_string(temp)+"_g_"+to_string(transfield)+"_h_"+to_string(longfield)+".csv");
+	out_file << "bin,exporder,exporder_sq,magn,magn_sq,magn_quad,trans_magn,trans_magn_sq\n";
 	
 	// Setup for measuring observables
-	double obs_exporder[bins];
-	double obs_exporder_sq[bins];
-	double obs_magn[bins];
-	double obs_magn_sq[bins];
-	double obs_magn_quad[bins];
+	double obs_exporder[bins] = {0};
+	double obs_exporder_sq[bins] = {0};
+	double obs_magn[bins] = {0};
+	double obs_magn_sq[bins] = {0};
+	double obs_magn_quad[bins] = {0};
+	double obs_trans_magn[bins] = {0};
+	double obs_trans_magn_sq[bins] = {0};
 	double obs_corr[500][500] = {0};
-	for (int n = 0; n < bins; n++) {
-		obs_exporder[n] = 0;
-		obs_exporder_sq[n] = 0;
-		obs_magn[n] = 0;
-		obs_magn_sq[n] = 0;
-		obs_magn_quad[n] = 0;
-	}
 	
 	// Start averaging sweeps
 	for (int n = 0; n < bins; n++) {
@@ -328,64 +263,31 @@ int main(int argc, char** argv) {
 		double obs_magn_bin[avsweeps] = {0};
 		double obs_magn_sq_bin[avsweeps] = {0};
 		double obs_magn_quad_bin[avsweeps] = {0};
-		/*
-		for (int k = 0; k < avsweeps; k++) {
-			obs_exporder_bin[k] = 0;
-			obs_exporder_sq_bin[k] = 0; 
-			obs_magn_bin[k] = 0;
-			obs_magn_sq_bin[k] = 0;
-			obs_magn_quad_bin[k] = 0;
-			obs_nn_corr_bin[k] = 0;
-			obs_corr_bin[k] = 0;
-		}
-		*/
+		double obs_trans_magn_bin[avsweeps] = {0};
+		double obs_trans_magn_sq_bin[avsweeps] = {0};
 
 		for (int j = 0; j < avsweeps; j++) {
 
-			ofstream cont_out; 
-			cont_out.open("sweeps/cont_out_avg_"+to_string(j)+".txt");
-
 			// Diagonal updates to insert / remove operators
 			diagonal_updates(spins, nspins, bonds, couplings, nbonds, opstring, 
-					effexporder, temp, hfield, rng, cont_out);
+					effexporder, temp, transfield, longfield, use_pauli_ops, rng);
+			
+			if (longfield == 0) {
+				flip_spin_clusters(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
+			}
 
 			// Cluster updates to vary diagonal / off-diagonal ops
-			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng, cont_out);
+			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 			
 			// Measure observables
 			measure_observables(spins, nspins, bonds, nbonds, opstring,
-					effexporder, j, obs_exporder_bin, obs_exporder_sq_bin,
-					obs_magn_bin, obs_magn_sq_bin, obs_magn_quad_bin,
+					effexporder, temp, transfield, j, obs_exporder_bin, 
+					obs_exporder_sq_bin, obs_magn_bin, obs_magn_sq_bin, 
+					obs_magn_quad_bin, obs_trans_magn_bin, obs_trans_magn_sq_bin,
 					obs_corr);
 
-			cont_out.close();
-
-			/*
-			// DEBUG
-			int counter_spin_flips[nspins] = {0};
-			int spini = 0;		
-
-			// DEBUG
-			for (int x = 0; x < effexporder; x++) {
-				if (opstring[x][0] == 2) {
-					if (opstring[x][2] > -1) {
-						counter_spin_flips[opstring[x][2]]++;
-					} else {
-						cout << "ERROR\n";
-					}
-				}
-			}
-
-			for (int x = 0; x < nspins; x++) {
-				if (counter_spin_flips[x] % 2 != 0) {
-					cout << "ABORT at sweep e" << n << " " << j;
-					exit(0);
-				}
-			}
-			*/
-
 		}
-
+		
 		// Now average over bin and add to big arrays
 		for (int j = 0; j < avsweeps; j++) {
 			obs_exporder[n] += obs_exporder_bin[j]/(double)avsweeps;
@@ -393,18 +295,65 @@ int main(int argc, char** argv) {
 			obs_magn[n] += obs_magn_bin[j]/(double)avsweeps;
 			obs_magn_sq[n] += obs_magn_sq_bin[j]/(double)avsweeps;
 			obs_magn_quad[n] += obs_magn_quad_bin[j]/(double)avsweeps;
+			obs_trans_magn[n] += obs_trans_magn_bin[j]/(double)avsweeps;
+			obs_trans_magn_sq[n] += obs_trans_magn_sq_bin[j]/(double)avsweeps;
 		}
+		
+		/* BINNING ?
+		// Do binning
+
+		// Number of bins left
+		int nbins_left = avsweeps;
+		int insert_index, bin1, bin2 = 0;
+		while (nbins_left > 1) {
+			for (int j = 0; j < nbins_left; j += 2) {
+				insert_index = floor(j/2);
+				// Check if last bin is alone or paired 
+				// (i.e. if we're at last or second-to-last bin)
+				if (nbins_left-j > 0) {
+					// Second-to-last bin
+					bin1 = j;
+					bin2 = j+1;
+				} else {
+					// Last bin
+					bin1 = j;
+					bin2 = j;
+				}
+				obs_exporder_bin[insert_index] = (obs_exporder_bin[bin1]+obs_exporder_bin[bin2])/(double)2;
+				obs_exporder_sq_bin[insert_index] = (obs_exporder_sq_bin[bin1]+obs_exporder_sq_bin[bin2])/(double)2;
+				obs_magn_bin[insert_index] = (obs_magn_bin[bin1]+obs_magn_bin[bin2])/(double)2;
+				obs_magn_sq_bin[insert_index] = (obs_magn_sq_bin[bin1]1+obs_magn_sq_bin[bin2])/(double)2;
+				obs_magn_quad_bin[insert_index] = (obs_magn_quad_bin[bin1]+obs_magn_quad_bin[bin2])/(double)2;
+				obs_trans_magn_bin[insert_index] = (obs_trans_magn_bin[bin1]+obs_trans_magn_bin[bin2])/(double)2;
+				obs_trans_magn_sq_bin[insert_index] = (obs_trans_magn_sq_bin[bin1]+obs_trans_magn_sq_bin[bin2])/(double)2;
+			}
+
+			// Set new number of bins
+			nbins_left = (nbins_left%2 == 0) ? nbins_left/2 : ceil(nbins_left/2);
+		}
+
+		// Store binned observables
+		obs_exporder[n] = obs_exporder_bin[0];
+		obs_exporder_sq[n] = obs_exporder_sq_bin[0];
+		obs_magn[n] = obs_magn_bin[0];
+		obs_magn_sq[n] = obs_magn_sq_bin[0];
+		obs_magn_quad[n] = obs_magn_quad_bin[0];
+		obs_trans_magn[n] = obs_trans_magn_bin[0];
+		obs_trans_magn_sq[n] = obs_trans_magn_sq_bin[0];
+		
+		*/
 
 		// Write observables to output file
 		out_file << to_string(n)+","+to_string(obs_exporder[n])+","+to_string(obs_exporder_sq[n])+","
-				+to_string(obs_magn[n])+","+to_string(obs_magn_sq[n])+","+to_string(obs_magn_quad[n]) + "\n" << flush;
+				+to_string(obs_magn[n])+","+to_string(obs_magn_sq[n])+","+to_string(obs_magn_quad[n]) +
+				+","+to_string(obs_trans_magn[n])+","+to_string(obs_trans_magn_sq[n])+"\n" << flush;
 	}
 
 	out_file.close();
 
 	// Write spin-spin correlations to dedicated file
 	ofstream corrs_file;
-	corrs_file.open(out_path+"/corrs_t_"+to_string(temp)+"_h_"+to_string(hfield)+".dat");
+	corrs_file.open(out_path+"/corrs_t_"+to_string(temp)+"_g_"+to_string(transfield)+"_h_"+to_string(longfield)+".dat");
 	corrs_file << nspins << "\n";
 	for (int si = 0; si < nspins; si++) {
 		for (int sj = 0; sj < nspins; sj++) {
@@ -436,6 +385,38 @@ int main(int argc, char** argv) {
 			cout << "\n";
 		}
 	}
+	*/
+
+	/*
+
+	// Build new output state based on correlations
+
+	double corr = 0;
+
+	// Initialise randoms
+	uniform_real_distribution<double> uni_dist(0,1);
+	uniform_int_distribution<int> rand_spin(0,nspins-1);
+
+	// First, choose random spin we set to 1
+	int rands = rand_spin(rng);
+	spins[rands] = 1;
+	// Iterate over all other spins
+	for (int i = 0; i < nspins; i++) {
+		// Only consider spins other than random one
+		if (i != rands) {
+			corr = obs_corr[rands][i];
+			// Use correlation as probability of alignment / anti-alignment
+			if (uni_dist(rng) < abs(corr)) {
+				// Let spins (anti)align
+				spins[i] = (corr > 0) ? 1 : -1;
+			} else {
+				cout << "wawee";
+				// Choose spin randomly
+				spins[i] = (uni_dist(rng) < 0.5) ? 1 : -1;
+			}
+		}
+	}
+
 	*/
 
 	// Write spins to output file
@@ -470,12 +451,14 @@ int random_conf(int spins[], int nspins, mt19937 &rng) {
 	for (int i = 0; i < nspins; i++) {
 		spins[i] = (uni_dist(rng) < 0.5) ? -1 : 1;
 	}
+
 	return 0;
 	
 }
 
 int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[], int nbonds,
-	int opstring[][3], int effexporder, double temp, double hfield, mt19937 &rng, ofstream &cont_out) {
+	int opstring[][3], int effexporder, double temp, double transfield, double longfield,
+	bool use_pauli_ops, mt19937 &rng) {
 
 	// Initialise random number generator
 	uniform_real_distribution<double> uni_dist(0,1);
@@ -494,6 +477,32 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 	int op_type, randb, rands, s1i, s1, s2i, s2, si;
 	double coin, paccept, bj;
 
+	// Set up acceptance probabilities
+	double paccept_insert_bond, paccept_insert_trans, paccept_insert_long,
+		paccept_remove_bond, paccept_remove_trans, paccept_remove_long = 0;
+	
+	/*
+	if (op_mode == "pauli") {
+		// Using Pauli matrices
+		paccept_insert_bond = (1/temp) * 3 * nbonds * 2 * abs(bj) /(double) (effexporder - exporder);
+		paccept_insert_trans = (1/temp) * 3 * nspins * transfield /(double) (effexporder - exporder);
+		paccept_insert_long = (1/temp) * 3 * nspins * 2 * longfield /(double) (effexporder - exporder);
+		paccept_remove_bond = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * 2 * abs(bj));
+		paccept_remove_trans = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield);
+		paccept_remove_long = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * 2 * longfield);
+	} else if (op_mode == "one-half") {
+		// Using spin 1/2 operators
+		paccept_insert_bond = (1/temp) * 3 * nbonds * abs(bj) /(double) (2*(effexporder - exporder));
+		paccept_insert_trans = (1/temp) * 3 * nspins * transfield /(double) (2*(effexporder - exporder));
+		paccept_insert_long = (1/temp) * 3 * nspins * transfield /(double) (effexporder - exporder);
+		paccept_remove_bond = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * abs(bj));
+		paccept_remove_trans = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield);
+		paccept_remove_long = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * longfield);
+	} else {
+		cout << "huh";
+	}
+	*/
+
 	// Iterate over all positions p in operator string
 	for (int p = 0; p < effexporder; p++) {
 		op_type = opstring[p][0];
@@ -505,7 +514,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 			// Flip a coin and decide if to proceed with 
 			// insertion of bond or spin operator
 			coin = uni_dist(rng);
-			if (coin < 0.5) {
+			if (coin < 1/(double)3) {
 				// Try to insert a diagonal bond operator
 				
 				// Choose random bond to insert into
@@ -528,8 +537,11 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 					// paccept = (1/temp) * nbonds * bj /(double) (2*(effexporder - exporder)); // original (wrong!)
 					// paccept = (1/temp) * nbonds * bj /(double) (effexporder - exporder); // fixed (spin 1/2)
 					
-					paccept = (1/temp) * 2 * nbonds * 2 * abs(bj) /(double) (effexporder - exporder); // Pauli matrices
-					//paccept = (1/temp) * nbonds * abs(bj) /(double) (effexporder - exporder); // spin 1/2
+					if (use_pauli_ops) {
+						paccept = (1/temp) * 3 * nbonds * 2 * abs(bj) /(double) (effexporder - exporder); // Pauli matrices
+					} else {
+						paccept = (1/temp) * 3 * nbonds * abs(bj) /(double) (2*(effexporder - exporder)); // spin 1/2
+					}
 					
 						//cout << "in" << exporder << "\t" << effexporder << "\t" << 1/temp 
 								//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
@@ -544,17 +556,20 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 						exporder++;
 					}
 				}
-			} else {
-				// Try to insert a diagonal spin operator
+			} else if (coin < 2/(double)3) {
+				// Try to insert a diagonal spin transverse operator
 				
 				// Get random position
 				rands = rand_spin(rng);
 				
 				// Evaluate acceptance probability
-				//paccept = (1/temp) * nspins * hfield /(double) (effexporder - exporder);
+				//paccept = (1/temp) * nspins * transfield /(double) (effexporder - exporder);
 				
-				paccept = (1/temp) * 2 * nspins * hfield /(double) (effexporder - exporder); // Pauli matrices
-				//paccept = (1/temp) * nspins * hfield /(double) (effexporder - exporder); // spin 1/2
+				if (use_pauli_ops) {
+					paccept = (1/temp) * 3 * nspins * transfield /(double) (effexporder - exporder); // Pauli matrices
+				} else {
+					paccept = (1/temp) * 3 * nspins * transfield /(double) (2*(effexporder - exporder)); // spin 1/2
+				}
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -563,6 +578,30 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 					opstring[p][1] = -1;
 					opstring[p][2] = rands;
 					exporder++;
+				}
+			} else {
+				// Try to insert a diagonal spin longitudinal operator
+				
+				// Get random position
+				rands = rand_spin(rng);
+				
+				// Check if spin is aligned with field
+				if (spins[rands] == 1) {
+					// Evaluate acceptance probability
+					if (use_pauli_ops) {
+						paccept = (1/temp) * 3 * nspins * 2 * longfield /(double) (effexporder - exporder); // Pauli matrices
+					} else {
+						paccept = (1/temp) * 3 * nspins * longfield /(double) (effexporder - exporder); // spin 1/2
+					}
+					
+					// Attempt move
+					if (uni_dist(rng) < paccept) {
+						// Insert diagonal spin operator
+						opstring[p][0] = 3;
+						opstring[p][1] = -1;
+						opstring[p][2] = rands;
+						exporder++;
+					}
 				}
 			}
 		} else if (op_type == 1) {
@@ -585,8 +624,11 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				//paccept = 2*(effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // original (wrong!)
 				// paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // spin 1/2
 
-				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nbonds * 2 * abs(bj)); // Pauli matrices
-				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * abs(bj)); // spin 1/2
+				if (use_pauli_ops) {
+					paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * 2 * abs(bj)); // Pauli matrices
+				} else {
+					paccept = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * abs(bj)); // spin 1/2
+				}
 
 				//cout << "out" << exporder << "\t" << effexporder << "\t" << 1/temp 
 						//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
@@ -600,13 +642,16 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 					exporder--;
 				}
 			} else if (opstring[p][2] > -1) {
-				// Operator is acting on spins
+				// Operator is transverse field op
 				
 				// Evaluate acceptance probability
-				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * hfield);
+				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * transfield);
 				
-				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nspins * hfield); // Pauli matrices
-				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * hfield); // spin 1/2
+				if (use_pauli_ops) {
+					paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield); // Pauli matrices
+				} else {
+					paccept = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield); // spin 1/2
+				}
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -617,37 +662,41 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 					exporder--;
 				}
 			}
+		} else if (op_type == 3) {
+			// Longitudinal field operator
+			
+			// Evaluate acceptance probability
+			//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * transfield);
+			
+			if (use_pauli_ops) {
+				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * 2 * longfield); // Pauli matrices
+			} else {
+				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * longfield); // spin 1/2
+			}
+			
+			// Attempt move
+			if (uni_dist(rng) < paccept) {
+				// Remove longitudinal field operator
+				opstring[p][0] = 0;
+				opstring[p][1] = -1;
+				opstring[p][2] = -1;
+				exporder--;
+			}
 		} else {
 			// Off-diagonal operator
 
 			// Modify spin according to opstring
 			si = opstring[p][2];
 			spins[si] *= -1;
-			cont_out << "flipped spin " << si << "\n";
 		}
 	}
-
-	/* DEBUG
-	// How many bond ops?
-	int count_bond = 0;
-	int count_sp = 0;
-	for (int i = 0; i < effexporder; i++) {
-		if (opstring[i][0] > 0 && opstring[i][1] > -1) {
-			count_bond++;
-		}
-		if (opstring[i][0] > 1 && opstring[i][2] > -1) {
-			count_sp++;
-		}
-	}
-	// cout << count_bond << " bond ops\t" << count_sp << " spin ops\n";
-	*/
 
 	return 0;
 	
 }
 
-int cluster_updates(int spins[], int nspins, int bonds[][2],
-	int nbonds, int opstring[][3], int effexporder, mt19937 &rng, ofstream &cont_out) {
+int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
+	int nbonds, int opstring[][3], int effexporder, mt19937 &rng) {
 	
 	// Random stuff
 	uniform_real_distribution<double> uni_dist(0,1);
@@ -673,7 +722,227 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 		// vertex leg belongs too
 		// 0 - identity op
 		// 1 - bond op
-		// 2 - spin op
+		// 2 - transverse field op
+		// 3 - longitudinal field op
+		linkops[i] = 0;
+	}
+
+	// Initialise variables
+	int v0, v1, v2, s1i, s2i, bond, sp, si;
+
+	// First, deal with links within bounds of opstring
+	// To do this, iterate over opstring
+	for (int p = 0; p < effexporder; p++) {
+		// Check if operator at p is acting on bonds or spins
+		if (opstring[p][0] > 0 && opstring[p][1] > -1) {
+			// Operator is acting on bonds
+
+			// Set vertex index
+			v0 = 4*p;
+			// Get bond index the op is acting on
+			bond = opstring[p][1];
+			// Get indices of spins belonging to bond
+			s1i = bonds[bond][0];
+			s2i = bonds[bond][1];
+			// Store op type
+			linkops[v0] = 1;
+			linkops[v0+1] = 1;
+			linkops[v0+2] = 1;
+			linkops[v0+3] = 1;
+			// Get last vertex indices of each spin
+			v1 = lasts[s1i];
+			v2 = lasts[s2i];
+			// Check if spins have appeared in vertex before
+			if (v1 > -1) {
+				// First spin has appeared before, so set link
+				links[v1] = v0;
+				links[v0] = v1;
+			} else {
+				// Set first appearance of spin as current leg
+				firsts[s1i] = v0;
+			}
+			if (v2 > -1) {
+				// Second spin has appeared before, so set link
+				links[v2] = v0+1; // ?? are we sure this is supposed to be v0 and not v0+1?
+				links[v0+1] = v2;
+			} else {
+				// Set first appearance of spin as current p
+				firsts[s2i] = v0+1;
+			}
+			// Update latest vertex appearance
+			lasts[s1i] = v0+2;
+			lasts[s2i] = v0+3;
+		}
+	}
+
+	// ----- Then trace all vertex loops and do flip updates -----
+
+	// Initialise variables
+	bool finished, fliploop, allspinops, cont, bondops_loop[effexporder],
+        spins_loop[nspins], visited[4*effexporder];
+	for (int i = 0; i < 4*effexporder; i++) {
+		visited[i] = false;
+	}
+	for (int i = 0; i < effexporder; i++) {
+		bondops_loop[i] = false;
+	}
+	for (int i = 0; i < nspins; i++) {
+		spins_loop[i] = false;
+	}
+	int currentv, linkedv, lastv, i, p, linkedp, change_counter, bi;
+	double coin;
+
+	// Iterate over all vertex legs
+	for (int v = 0; v < 4*effexporder; v++) {
+		// Check if vertex leg is connected to any other legs
+		if (links[v] > -1 && !visited[v]) {
+            // Set up variables for loop
+			finished = false;
+            fliploop = true;
+
+            // Set current leg as initial leg
+			currentv = v;
+
+            // See if initial leg belongs to bond or spin op
+            if (linkops[currentv] == 1) {
+                // Initial leg belongs to bond op
+
+				visited[currentv] = true;
+
+                // Get opstring index
+                p = floor(currentv/(double)4);
+                
+                // Operator is part of loop
+                bondops_loop[p] = true;
+
+				// Get spins belonging to bond
+				bi = opstring[p][1];
+				s1i = bonds[bi][0];
+				s2i = bonds[bi][1];
+
+				// Set spins as part of cluster
+				spins_loop[s1i] = true;
+				spins_loop[s2i] = true;
+            } else if (linkops[currentv] == 2) {
+                cout << "nope!";
+            }
+            
+			// Traverse loop
+			while (!finished) {
+                // Reset counter of how many ops have been added to loop
+                change_counter = 0;
+
+                // Iterate over all operators
+                for (int pi = 0; pi < effexporder; pi++) {
+                    if (bondops_loop[pi]) {
+                        // Iterate over legs of op
+                        // Go through legs belonging to bond op
+                        for (int i = 0; i < 4; i++) {
+                            // Get current vertex leg
+                            currentv = 4*pi+i;
+                            visited[currentv] = true;
+                            
+                            linkedv = links[currentv];
+							
+							// Check if leg is linked to anything
+							if (linkedv > -1) {
+								// Leg is linked to something, so get linked op
+								linkedp = floor(linkedv/(double)4);
+								// Check if this linked op is a bond op
+								if (linkops[linkedv] == 1) {
+									// Check if bond op is already part of loop
+									if (!bondops_loop[linkedp]) {
+										// Bond op hasn't been added yet, so add it
+										bondops_loop[linkedp] = true;
+										change_counter++;
+
+										// Get spins belonging to bond
+										bi = opstring[linkedp][1];
+										s1i = bonds[bi][0];
+										s2i = bonds[bi][1];
+
+										// Set spins as part of cluster
+										spins_loop[s1i] = true;
+										spins_loop[s2i] = true;
+									}
+								}
+							}
+                        }
+                    }
+                }
+
+				// If loop hasn't grown in this iteration, finish the loop
+                if (change_counter == 0) {
+                    finished = true;
+                }
+	        }
+
+            // Check if loop should be flipped
+            if (uni_dist(rng) < 0.5) {
+                // Loop is flippable
+
+                // Iterate over all spin ops and change type
+                for (int si = 0; si < nspins; si++) {
+                    // Check if spin op is part of loop
+                    if (spins_loop[si]) {
+                        // Flip spin
+						spins[si] *= -1;
+                    }
+                }
+            }
+        }
+
+		// Empty list of bond and spin ops in loop
+		for (int i = 0; i < effexporder; i++) {
+			bondops_loop[i] = false;
+		}
+		for (int si = 0; si < nspins; si++) {
+			spins_loop[si] = false;
+        }
+	}
+
+	// Finally, flip all spins without associated bond ops
+	for (int si = 0; si < nspins; si++) {
+		// Check if spin op has no associated bond ops
+		if (firsts[si] == -1 && uni_dist(rng) < 0.5) {
+			// Flip spin with 1/2 prob
+			spins[si] *= -1;
+		}
+	}
+
+	return 0;
+
+}
+
+int cluster_updates(int spins[], int nspins, int bonds[][2],
+	int nbonds, int opstring[][3], int effexporder, mt19937 &rng) {
+	
+	// Random stuff
+	uniform_real_distribution<double> uni_dist(0,1);
+
+	// ----- Construct vertex link list -----
+
+	// List of first and last vertex legs of each spin
+	int firsts[nspins];
+	int lasts[nspins];
+	for (int i = 0; i < nspins; i++) {
+		firsts[i] = -1;
+		lasts[i] = -1;
+	}
+	// List of vertex links
+	int links[4*effexporder];
+	for (int i = 0; i < 4*effexporder; i++) {
+		links[i] = -1;
+	}
+	// List of operator types each vertex leg belongs to
+	int linkops[4*effexporder];
+	for (int i = 0; i < 4*effexporder; i++) {
+		// This encodes the type of operator each
+		// vertex leg belongs too
+		// 0 - identity op
+		// 1 - bond op
+		// 2 - transverse field op
+		// 3 - longitudinal field op
 		linkops[i] = 0;
 	}
 
@@ -730,8 +999,14 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 			// Get bond index the op is acting on
 			sp = opstring[p][2];
 			// Store op type
-			linkops[v0] = 2;
-			linkops[v0+2] = 2;
+			if (opstring[p][0] == 3) {
+				// Operator is longitudinal field
+				linkops[v0] = 3;
+				linkops[v0+2] = 3;
+			} else {
+				linkops[v0] = 2;
+				linkops[v0+2] = 2;
+			}
 			// Get last vertex indices of each spin
 			v1 = lasts[sp];
 			// Check if spins have appeared in vertex before
@@ -830,7 +1105,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
                 // Operator is part of loop
                 bondops_loop[p] = true;
             } else if (linkops[currentv] == 2) {
-                // Initial leg belongs to spin op
+                // Initial leg belongs to transverse field op
 
                 visited[currentv] = true;
 
@@ -974,84 +1249,20 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 
             // Check if loop should be flipped
             if (fliploop && uni_dist(rng) < 0.5) {
-				
-				// DEBUG
-				int counter_spin_flips[nspins] = {0};
-				int spini = 0;
-				
-				string output = "";
-
-				cont_out << "-- FLIPPABLE OPSTRING --\n";
-				for (int p = 0; p < effexporder; p++) {
-					cont_out << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
-				}
-				cont_out << "----\n";
-
-				output += "-- FLIPPABLE OPSTRING --\n";
-				for (int p = 0; p < effexporder; p++) {
-					output += to_string(p) + "\t" + to_string(opstring[p][0]) + "\t" 
-						+ to_string(opstring[p][1]) + "\t" + to_string(opstring[p][2]) + "\n";
-				}
-				output += "----\n";
-
                 // Loop is flippable
-				//cout << "-----\n";
+
                 // Iterate over all spin ops and change type
                 for (int pi = 0; pi < effexporder; pi++) {
                     // Check if spin op is part of loop
                     if (spinops_loop[pi]) {
                         // Flip spin op
-						// DEBUG
-						cont_out << pi << "\t" << opstring[pi][0] << "\t"
-							<< opstring[pi][1] << "\t"
-							<< opstring[pi][2] << "\t";
-
                         opstring[pi][0] = (opstring[pi][0] == 1) ? 2 : 1;
 
-						// DEBUG
-						spini = opstring[pi][2];
-
-						counter_spin_flips[spini]++;
-						// DEBUG
-						cont_out << opstring[pi][0] << "\t";
-						cont_out << "flip op\n";
-
-						output += "flip op " + to_string(pi) + "\n";
-
-					// cout << "flip op\n";
                         // Set spin as part of flipped cluster
                         sp = opstring[pi][2];
                         free_spins[sp] = 2;
                     }
                 }
-
-				cont_out << "-- FLIPPED OPSTRING --\n";
-				for (int p = 0; p < effexporder; p++) {
-					cont_out << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
-				}
-				cont_out << "----\n";
-				//cout << "-----\n";
-
-				/*
-				// DEBUG
-				for (int x = 0; x < nspins; x++) {
-					if (counter_spin_flips[x] % 2 != 0) {
-						ofstream outputf;
-						outputf.open("errors_"+to_string(effexporder)+".txt");
-						outputf << output;
-						outputf << "-- FLIPPED OPSTRING --\n";
-						for (int p = 0; p < effexporder; p++) {
-							outputf << p << "\t" << opstring[p][0] << "\t" << opstring[p][1] << "\t" << opstring[p][2] << "\n";
-						}
-						outputf << "----\n";
-						outputf.close();
-
-						cout << "ABORT";
-						exit(0);
-					}
-				}
-				*/
-
             } else {
 				// Loop isn't flipped
 				// ...
@@ -1118,7 +1329,7 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 	if (exporder < 30) {
 		// This might be necessary to account for fluctuations
 		// in expansion order at high T and low expansion orders
-		insert_prob = 0.1;
+		insert_prob = 0.2;
 	} else {
 		insert_prob = 0.67;
 	}
@@ -1165,7 +1376,7 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 
 	// If no operators are in the opstring, set the new exporder
 	// as 1
-	newexporder = (opcount > 0) ? opcount : 10;
+	newexporder = (opcount > 0) ? opcount : 5;
 	//cout << newexporder << "\n";
 
 	for (int p = 0; p < newexporder; p++) {
@@ -1179,9 +1390,10 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 }
 
 int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
-	int opstring[][3], int effexporder, int obs_count, double obs_exporder[], 
-	double obs_exporder_sq[], double obs_magn[], double obs_magn_sq[], 
-	double obs_magn_quad[], double obs_corr[500][500]) {
+	int opstring[][3], int effexporder, double temp, double transfield, int obs_count,
+	double obs_exporder[], double obs_exporder_sq[], double obs_magn[], 
+	double obs_magn_sq[], double obs_magn_quad[], double obs_trans_magn[], 
+	double obs_trans_magn_sq[], double obs_corr[500][500]) {
 
 	// ----- Measure internal energy (prop. to expansion order) -----
 
@@ -1315,6 +1527,20 @@ int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	obs_magn[obs_count] = avg_magn/(double)nspins; // abs(avg_magn);
 	obs_magn_sq[obs_count] = avg_magn_sq/(double)pow(nspins, 2);
 	obs_magn_quad[obs_count] = avg_magn_quad/(double)pow(nspins, 4);
+
+	// Evaluate transverse magnetisation (see Sandvik book chapter)
+	// To do so, count all transverse field operators
+	int count_trans_ops = 0;
+	for (int p = 0; p < effexporder; p++) {
+		// Check if operator at position p is trans field op
+		if (opstring[p][0] == 2 && opstring[p][2] > -1) {
+			count_trans_ops++;
+		}
+	}
+	double trans_magn = 0;
+	trans_magn = count_trans_ops*temp/(double)transfield;
+	obs_trans_magn[obs_count] = trans_magn;
+	obs_trans_magn_sq[obs_count] = pow(trans_magn, 2);
 
 	// Need to implement more observables
 	// ...
