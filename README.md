@@ -20,13 +20,12 @@ configuration file (*setup.txt*) containing details such as the number of sweeps
 	* *eqsweeps*: number of equilibration Monte Carlo (MC) sweeps per spin
 	* *bins*: number of bins to average into
 	* *avsweeps*: number of averaging MC sweeps per bin per spin
-	* *max_expansion_order*: initial maximum series expansion order cutoff (this value must be 1 or greater,
-	but will be adapted automatically during equilibration)
+	* *operator_mode*: type of spin operator; either *pauli* (Pauli matrices) or *one-half* (spin-1/2 operators)
 3. Compile *qmc.cpp*:
 	```g++ qmc.cpp -g -o qmc```
 4. Run executable with inline parameters:
-	```./qmc {output directoy} {temperature} {transverse field}```
+	```./qmc {output directoy} {temperature} {transverse field} {longitudinal field}```
 
 ## Equilibration issues
 
-...
+At low temperature, he results of this algorithm will depend slightly on the choice of initial (periodic) state ...
