@@ -528,8 +528,8 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 					// paccept = (1/temp) * nbonds * bj /(double) (2*(effexporder - exporder)); // original (wrong!)
 					// paccept = (1/temp) * nbonds * bj /(double) (effexporder - exporder); // fixed (spin 1/2)
 					
-					// paccept = (1/temp) * 2 * nbonds * 2 * abs(bj) /(double) (effexporder - exporder); // Pauli matrices
-					paccept = (1/temp) * nbonds * abs(bj) /(double) (effexporder - exporder); // spin 1/2
+					paccept = (1/temp) * 2 * nbonds * 2 * abs(bj) /(double) (effexporder - exporder); // Pauli matrices
+					//paccept = (1/temp) * nbonds * abs(bj) /(double) (effexporder - exporder); // spin 1/2
 					
 						//cout << "in" << exporder << "\t" << effexporder << "\t" << 1/temp 
 								//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
@@ -553,8 +553,8 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				// Evaluate acceptance probability
 				//paccept = (1/temp) * nspins * hfield /(double) (effexporder - exporder);
 				
-				//paccept = (1/temp) * 2 * nspins * hfield /(double) (effexporder - exporder); // Pauli matrices
-				paccept = (1/temp) * nspins * hfield /(double) (effexporder - exporder); // spin 1/2
+				paccept = (1/temp) * 2 * nspins * hfield /(double) (effexporder - exporder); // Pauli matrices
+				//paccept = (1/temp) * nspins * hfield /(double) (effexporder - exporder); // spin 1/2
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -585,8 +585,8 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				//paccept = 2*(effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // original (wrong!)
 				// paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // spin 1/2
 
-				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nbonds * 2 * abs(bj)); // Pauli matrices
-				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * abs(bj)); // spin 1/2
+				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nbonds * 2 * abs(bj)); // Pauli matrices
+				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * abs(bj)); // spin 1/2
 
 				//cout << "out" << exporder << "\t" << effexporder << "\t" << 1/temp 
 						//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
@@ -605,8 +605,8 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				// Evaluate acceptance probability
 				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * hfield);
 				
-				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nspins * hfield); // Pauli matrices
-				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * hfield); // spin 1/2
+				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 2 * nspins * hfield); // Pauli matrices
+				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * hfield); // spin 1/2
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -1115,7 +1115,7 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 	int ops_inserted, old_op = 0;
 	//double insert_prob = (newexporder-exporder)/(double)(newexporder+1);
 	double insert_prob = 0;
-	if (exporder < 100) {
+	if (exporder < 30) {
 		// This might be necessary to account for fluctuations
 		// in expansion order at high T and low expansion orders
 		insert_prob = 0.1;
