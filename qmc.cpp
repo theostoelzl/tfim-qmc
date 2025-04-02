@@ -301,50 +301,6 @@ int main(int argc, char** argv) {
 			obs_trans_magn[n] += obs_trans_magn_bin[j]/(double)avsweeps;
 			obs_trans_magn_sq[n] += obs_trans_magn_sq_bin[j]/(double)avsweeps;
 		}
-		
-		/* BINNING ?
-		// Do binning
-
-		// Number of bins left
-		int nbins_left = avsweeps;
-		int insert_index, bin1, bin2 = 0;
-		while (nbins_left > 1) {
-			for (int j = 0; j < nbins_left; j += 2) {
-				insert_index = floor(j/2);
-				// Check if last bin is alone or paired 
-				// (i.e. if we're at last or second-to-last bin)
-				if (nbins_left-j > 0) {
-					// Second-to-last bin
-					bin1 = j;
-					bin2 = j+1;
-				} else {
-					// Last bin
-					bin1 = j;
-					bin2 = j;
-				}
-				obs_exporder_bin[insert_index] = (obs_exporder_bin[bin1]+obs_exporder_bin[bin2])/(double)2;
-				obs_exporder_sq_bin[insert_index] = (obs_exporder_sq_bin[bin1]+obs_exporder_sq_bin[bin2])/(double)2;
-				obs_magn_bin[insert_index] = (obs_magn_bin[bin1]+obs_magn_bin[bin2])/(double)2;
-				obs_magn_sq_bin[insert_index] = (obs_magn_sq_bin[bin1]1+obs_magn_sq_bin[bin2])/(double)2;
-				obs_magn_quad_bin[insert_index] = (obs_magn_quad_bin[bin1]+obs_magn_quad_bin[bin2])/(double)2;
-				obs_trans_magn_bin[insert_index] = (obs_trans_magn_bin[bin1]+obs_trans_magn_bin[bin2])/(double)2;
-				obs_trans_magn_sq_bin[insert_index] = (obs_trans_magn_sq_bin[bin1]+obs_trans_magn_sq_bin[bin2])/(double)2;
-			}
-
-			// Set new number of bins
-			nbins_left = (nbins_left%2 == 0) ? nbins_left/2 : ceil(nbins_left/2);
-		}
-
-		// Store binned observables
-		obs_exporder[n] = obs_exporder_bin[0];
-		obs_exporder_sq[n] = obs_exporder_sq_bin[0];
-		obs_magn[n] = obs_magn_bin[0];
-		obs_magn_sq[n] = obs_magn_sq_bin[0];
-		obs_magn_quad[n] = obs_magn_quad_bin[0];
-		obs_trans_magn[n] = obs_trans_magn_bin[0];
-		obs_trans_magn_sq[n] = obs_trans_magn_sq_bin[0];
-		
-		*/
 
 		// Write observables to output file
 		out_file << to_string(n)+","+to_string(obs_exporder[n])+","+to_string(obs_exporder_sq[n])+","
@@ -381,47 +337,6 @@ int main(int argc, char** argv) {
 	cout << "average expansion order: " << avgn << "\n";
 	cout << "average magnetisation: " << avgm << "\n";
 	
-	/*
-	for (int i = 0; i < nspins; i++) {
-		cout << spins[i] << "\t"; 
-		if (i%16 == 0) {
-			cout << "\n";
-		}
-	}
-	*/
-
-	/*
-
-	// Build new output state based on correlations
-
-	double corr = 0;
-
-	// Initialise randoms
-	uniform_real_distribution<double> uni_dist(0,1);
-	uniform_int_distribution<int> rand_spin(0,nspins-1);
-
-	// First, choose random spin we set to 1
-	int rands = rand_spin(rng);
-	spins[rands] = 1;
-	// Iterate over all other spins
-	for (int i = 0; i < nspins; i++) {
-		// Only consider spins other than random one
-		if (i != rands) {
-			corr = obs_corr[rands][i];
-			// Use correlation as probability of alignment / anti-alignment
-			if (uni_dist(rng) < abs(corr)) {
-				// Let spins (anti)align
-				spins[i] = (corr > 0) ? 1 : -1;
-			} else {
-				cout << "wawee";
-				// Choose spin randomly
-				spins[i] = (uni_dist(rng) < 0.5) ? 1 : -1;
-			}
-		}
-	}
-
-	*/
-
 	// Write spins to output file
 	ofstream spins_out;
 	spins_out.open("spins.txt");
@@ -484,28 +399,6 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 	double paccept_insert_bond, paccept_insert_trans, paccept_insert_long,
 		paccept_remove_bond, paccept_remove_trans, paccept_remove_long = 0;
 	
-	/*
-	if (op_mode == "pauli") {
-		// Using Pauli matrices
-		paccept_insert_bond = (1/temp) * 3 * nbonds * 2 * abs(bj) /(double) (effexporder - exporder);
-		paccept_insert_trans = (1/temp) * 3 * nspins * transfield /(double) (effexporder - exporder);
-		paccept_insert_long = (1/temp) * 3 * nspins * 2 * longfield /(double) (effexporder - exporder);
-		paccept_remove_bond = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * 2 * abs(bj));
-		paccept_remove_trans = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield);
-		paccept_remove_long = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * 2 * longfield);
-	} else if (op_mode == "one-half") {
-		// Using spin 1/2 operators
-		paccept_insert_bond = (1/temp) * 3 * nbonds * abs(bj) /(double) (2*(effexporder - exporder));
-		paccept_insert_trans = (1/temp) * 3 * nspins * transfield /(double) (2*(effexporder - exporder));
-		paccept_insert_long = (1/temp) * 3 * nspins * transfield /(double) (effexporder - exporder);
-		paccept_remove_bond = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * abs(bj));
-		paccept_remove_trans = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield);
-		paccept_remove_long = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * longfield);
-	} else {
-		cout << "huh";
-	}
-	*/
-
 	// Iterate over all positions p in operator string
 	for (int p = 0; p < effexporder; p++) {
 		op_type = opstring[p][0];
@@ -537,9 +430,8 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				// if bj > 0, ferromagnetic bond
 				if (bj*s1*s2 > 0) {
 					// Spins are arranged correctly so try to insert diagonal operator
-					// paccept = (1/temp) * nbonds * bj /(double) (2*(effexporder - exporder)); // original (wrong!)
-					// paccept = (1/temp) * nbonds * bj /(double) (effexporder - exporder); // fixed (spin 1/2)
-					
+
+					// Evaluate acceptance probability
 					if (use_pauli_ops) {
 						paccept = (1/temp) * 3 * nbonds * 2 * abs(bj) /(double) (effexporder - exporder); // Pauli matrices
 					} else {
@@ -565,9 +457,7 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				// Get random position
 				rands = rand_spin(rng);
 				
-				// Evaluate acceptance probability
-				//paccept = (1/temp) * nspins * transfield /(double) (effexporder - exporder);
-				
+				// Evaluate acceptance probability				
 				if (use_pauli_ops) {
 					paccept = (1/temp) * 3 * nspins * transfield /(double) (effexporder - exporder); // Pauli matrices
 				} else {
@@ -592,9 +482,11 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				if (spins[rands] == 1) {
 					// Evaluate acceptance probability
 					if (use_pauli_ops) {
-						paccept = (1/temp) * 3 * nspins * 2 * longfield /(double) (effexporder - exporder); // Pauli matrices
+						// Pauli matrices
+						paccept = (1/temp) * 3 * nspins * 2 * longfield /(double) (effexporder - exporder);
 					} else {
-						paccept = (1/temp) * 3 * nspins * longfield /(double) (effexporder - exporder); // spin 1/2
+						// spin 1/2
+						paccept = (1/temp) * 3 * nspins * longfield /(double) (effexporder - exporder);
 					}
 					
 					// Attempt move
@@ -624,17 +516,13 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				bj = couplings[opstring[p][1]];
 
 				// Evaluate acceptance probability
-				//paccept = 2*(effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // original (wrong!)
-				// paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nbonds * bj); // spin 1/2
-
 				if (use_pauli_ops) {
-					paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * 2 * abs(bj)); // Pauli matrices
+					// Pauli matrices
+					paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * 2 * abs(bj));
 				} else {
-					paccept = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * abs(bj)); // spin 1/2
+					// spin 1/2
+					paccept = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nbonds * abs(bj));
 				}
-
-				//cout << "out" << exporder << "\t" << effexporder << "\t" << 1/temp 
-						//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
 				
 				// Attempt move
 				if (uni_dist(rng) < paccept) {
@@ -648,12 +536,12 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 				// Operator is transverse field op
 				
 				// Evaluate acceptance probability
-				//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * transfield);
-				
 				if (use_pauli_ops) {
-					paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield); // Pauli matrices
+					// Pauli matrices
+					paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield);
 				} else {
-					paccept = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield); // spin 1/2
+					// spin 1/2
+					paccept = 2 * (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * transfield);
 				}
 				
 				// Attempt move
@@ -669,12 +557,12 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 			// Longitudinal field operator
 			
 			// Evaluate acceptance probability
-			//paccept = (effexporder - exporder + 1) /(double) ((1/temp) * nspins * transfield);
-			
 			if (use_pauli_ops) {
-				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * 2 * longfield); // Pauli matrices
+				// Pauli matrices
+				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * 2 * longfield);
 			} else {
-				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * longfield); // spin 1/2
+				// spin 1/2
+				paccept = (effexporder - exporder + 1) /(double) ((1/temp) * 3 * nspins * longfield);
 			}
 			
 			// Attempt move
