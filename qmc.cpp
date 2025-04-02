@@ -221,6 +221,8 @@ int main(int argc, char** argv) {
 		// Cluster updates to vary diagonal / off-diagonal ops
 		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 		
+		// Shift updates to move around bond and transverse-field operators
+		// at little to no cost
 		shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
 
 		// Adjust largest expansion order
@@ -280,6 +282,8 @@ int main(int argc, char** argv) {
 			// Cluster updates to vary diagonal / off-diagonal ops
 			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 
+			// Shift updates to move around bond and transverse-field operators
+			// at little to no cost
 			shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
 			
 			// Measure observables
