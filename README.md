@@ -1,4 +1,4 @@
-# Quantum Monte Carlo simulations of the transverse field Ising model using the stochastic series expansion method
+# Quantum Monte Carlo for transverse-field Ising models
 
 ## What this programme is
 
