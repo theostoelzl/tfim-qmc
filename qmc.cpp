@@ -26,21 +26,6 @@ Niels Lohmann under the MIT license (https://opensource.org/licenses/MIT).
 
 using namespace std;
 
-// TO IMPLEMENT:
-// 1 - flipping of single spins after flip operator updates
-//     and flipping all spins pairwise who have bond ops in between (DONE)
-// 2 - flipping of cluster spins (equiv to Fig 59, Sandvik) ? (DONE)
-// 3 - flip updates of clusters of 2 spin ops sandwiching
-//     bond ops (1 or several) (DONE)
-// 4 - expansion cut off (DONE)
-// 5 - input file (DONE)
-// 6 - J-coupling for individual bonds (DONE)
-// 7 - measuring observables (heat capacity !)
-// 8 - look into why max cutoff needs to be about 3x the mean expansion order?
-// 9 - averaging into bins (DONE)
-// 10 - set up random functions for whole programme, not in each
-//      function separately (DONE)
-
 int random_conf(int spins[], int nspins, mt19937 &rng);
 int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[], int nbonds,
 	int opstring[][3], int effexporder, double temp, double transfield, double longfield, 
@@ -1038,7 +1023,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 	}
 
 	// ----- Now shift bond ops -----
-	
+
 	int randb = -1;
 	int s1i, s2i, s1, s2;
 	double bj_old, bj_new, paccept;
