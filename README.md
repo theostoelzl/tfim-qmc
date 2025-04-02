@@ -10,10 +10,11 @@ configuration file (*setup.txt*) containing details such as the number of sweeps
 ## How to run this programme
 
 1. To generate an input file containing all bonds (*bonds.txt*), run
-	```python genlattice.py chain {n}```
-	to generate a chain of *n* spins with periodic boundary conditions (PBC). To generate
-	a simple square lattice with PBC, run
-	```python genlattice.py square {nx} {ny}```.
+	```python genlattice.py {lattice} {n1} {n2} ...```
+	where ```n1```, ```n2```, and so on are the lattice lengths along each spatial direction.
+	Available lattices are (all with periodic boundary conditions): ```chain``` (1-D chain), ```square``` (simple square), 
+	```inverse_square``` (see Sandvik 2018), ```square_crossings``` (J1-J2 square), ```shastry``` (Shastry-Sutherland).
+	As of the latest version, coupling constants need to be modified in the code directly.
 	An output file (*bonds_{lattice}.txt*) will be generated, which you will need to rename to *bonds.txt*
 	and put into the same directory as the main programme.
 2. Modify *setup.json* as needed. The input parameters are:
