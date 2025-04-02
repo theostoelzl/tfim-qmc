@@ -47,9 +47,11 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 	bool use_pauli_ops, mt19937 &rng);
 int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	int nbonds, int opstring[][3], int effexporder, mt19937 &rng);
+int shift_update(int opstring[][3], int effexporder, int spins[], int nspins, 
+	int bonds[][2], double couplings[], int nbonds, mt19937 &rng);
 int cluster_updates(int spins[], int nspins, int bonds[][2],
 	int nbonds, int opstring[][3], int effexporder, mt19937 &rng);
-int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng);
+int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng, int scale_up_to=0);
 int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	int opstring[][3], int effexporder, double temp, double transfield, 
 	int obs_count, double obs_exporder[], double obs_exporder_sq[], double obs_magn[], 
@@ -216,6 +218,10 @@ int main(int argc, char** argv) {
 	cout << "Started equilibration ..." << "\n";
 	cout << flush;
 
+	// Mean maximum expansion order
+	double avg_max_exporder = 0;
+	int avg_from = eqsweeps - 1000*nspins;
+
 	// Start equilibration
 	for (int i = 0; i < eqsweeps; i++) {
 
@@ -230,10 +236,20 @@ int main(int argc, char** argv) {
 		// Cluster updates to vary diagonal / off-diagonal ops
 		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 		
+		shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
+
 		// Adjust largest expansion order
 		effexporder = adjust_maxexporder(opstring, effexporder, rng);
 
+		if (i > avg_from) {
+			avg_max_exporder += effexporder/(double) (1000*nspins);
+		}
+
 	}
+
+	// Set new maximum expansion order and scale opstring
+	int new_maxexporder = ceil(avg_max_exporder);
+	effexporder = adjust_maxexporder(opstring, effexporder, rng, new_maxexporder);
 
 	cout << "Finished equilibration." << "\n";
 	cout << "Maximum expansion order: " << effexporder << "\n";
@@ -278,6 +294,8 @@ int main(int argc, char** argv) {
 
 			// Cluster updates to vary diagonal / off-diagonal ops
 			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
+
+			shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
 			
 			// Measure observables
 			measure_observables(spins, nspins, bonds, nbonds, opstring,
@@ -914,6 +932,158 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 
 }
 
+int shift_update(int opstring[][3], int effexporder, int spins[], int nspins, 
+	int bonds[][2], double couplings[], int nbonds, mt19937 &rng) {
+
+	// Random stuff
+	uniform_real_distribution<double> uni_dist(0,1);
+	uniform_int_distribution<int> rand_spin(0,nspins-1);
+
+	// Find all diagonal transverse-field and identity operators in opstring
+	int tf_op[effexporder] = {0};
+	int id_op[effexporder] = {0};
+	for (int i = 0; i < effexporder; i++) {
+		tf_op[i] = -1;
+		id_op[i] = -1;
+	}
+	int n_tf = 0;
+	int n_id = 0;
+	for (int p = 0; p < effexporder; p++) {
+		if (opstring[p][0] == 0) {
+			// Identity operator
+			id_op[n_id] = p;
+			n_id++;
+		} else if (opstring[p][0] == 1 && opstring[p][2] > -1) {
+			// Diagonal transverse-field operator
+			tf_op[n_tf] = p;
+			n_tf++;
+		}
+	}
+
+	//cout << "before: number of tf " << n_tf << "\n";
+
+	int remove_tf = -1;
+	int insert_id = -1;
+	int insert_spin = -1;
+	int offset = 0;
+	int loop_until = 0;
+	int rand = -1;
+	
+	// More transverse ops than id ops?
+	bool more_tf = (n_tf > n_id) ? true : false;
+	if (more_tf) {
+		loop_until = n_id;
+	} else {
+		loop_until = n_tf;
+	}
+
+	// Iterate over all ops of which we have more
+	for (int i = 0; i < loop_until; i++) {
+		// Choose if op will be moved
+		if (uni_dist(rng) < 0.5) {
+			// Proceed with moving op
+			
+			// Choose random identity op
+			if (more_tf) {
+				uniform_int_distribution<int> rand_op(0,n_tf-1);
+				rand = rand_op(rng);
+				remove_tf = tf_op[rand];
+				insert_id = id_op[i];
+				//cout << "random tf " << n_tf << " " << insert_id << " " << remove_tf << "\n";
+			} else {
+				uniform_int_distribution<int> rand_op(0,n_id-1);
+				remove_tf = tf_op[i];
+				insert_id = id_op[rand_op(rng)];
+				//cout << "random id " << insert_id << " " << remove_tf << "\n";
+			}
+			// DEBUG
+			if (remove_tf == -1 || insert_id == -1) {
+				cout << "HALT" << flush;
+			}
+			
+			// Swap ops
+			opstring[insert_id][0] = 1;
+			//cout << insert_id << " " << remove_tf << "\n";
+			insert_spin = rand_spin(rng);
+			opstring[insert_id][2] = insert_spin;
+			opstring[remove_tf][0] = 0;
+			opstring[remove_tf][2] = -1;
+
+			if (more_tf) {
+				// Update number of identity operators and list of positions
+				for (int j = 0; j < n_tf-1; j++) {
+					// Is this identity operator the one we just replaced?
+					if (tf_op[j] == remove_tf) {
+						// Yes, it is
+						offset = 1;
+					}
+					tf_op[j] = tf_op[j+offset];
+				}
+				tf_op[n_tf-1] = -1;
+				n_tf--;
+			} else {
+				// Update number of identity operators and list of positions
+				for (int j = 0; j < n_id-1; j++) {
+					// Is this identity operator the one we just replaced?
+					if (id_op[j] == insert_id) {
+						// Yes, it is
+						offset = 1;
+					}
+					id_op[j] = id_op[j+offset];
+				}
+				id_op[n_id-1] = -1;
+				n_id--;
+			}
+		}
+	}
+
+	// ----- Now shift bond ops -----
+	
+	int randb = -1;
+	int s1i, s2i, s1, s2;
+	double bj_old, bj_new, paccept;
+
+
+	uniform_int_distribution<int> rand_bond(0,nbonds-1);
+
+	for (int p = 0; p < effexporder; p++) {
+		if (opstring[p][0] == 1 && opstring[p][1] > -1) {
+			// Bond operator
+			
+			// Decide whether to attempt shift
+			if (uni_dist(rng) < 0.5) {
+				// Get current coupling constant
+				bj_old = couplings[opstring[p][1]];
+
+				// Choose random bond to shift to
+				randb = rand_bond(rng);
+
+				// Get corresponding spins
+				s1i = bonds[randb][0];	
+				s1 = spins[s1i];
+				s2i = bonds[randb][1];
+				s2 = spins[s2i];
+
+				// Get coupling constant of bond
+				bj_new = couplings[randb];
+				paccept = bj_new/(double) bj_old;
+				
+				// Check if spins are parallel
+				// if bj < 0, anti-ferromagnetic bond
+				// if bj > 0, ferromagnetic bond
+				if (bj*s1*s2 > 0 && uni_dist(rng) < paccept) {
+					// Shift operator to other bond
+					opstring[p][1] = randb;
+				}
+			}
+		} else if (opstring[p][0] == 2) {
+			spins[opstring[p][2]] *= -1;
+		}
+	}
+
+	return 0;
+}
+
 int cluster_updates(int spins[], int nspins, int bonds[][2],
 	int nbonds, int opstring[][3], int effexporder, mt19937 &rng) {
 	
@@ -1304,7 +1474,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 
 }
 
-int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
+int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng, int scale_up_to) {
 
 	// Initialise random number generator
 	uniform_real_distribution<double> uni_dist(0,1);
@@ -1326,12 +1496,19 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng) {
 	int ops_inserted, old_op = 0;
 	//double insert_prob = (newexporder-exporder)/(double)(newexporder+1);
 	double insert_prob = 0;
-	if (exporder < 30) {
-		// This might be necessary to account for fluctuations
-		// in expansion order at high T and low expansion orders
-		insert_prob = 0.2;
+	
+	// Is there a target max expansion order?
+	if (scale_up_to == 0) {
+		// Target max expansion order
+		if (exporder < 30) {
+			// This might be necessary to account for fluctuations
+			// in expansion order at high T and low expansion orders
+			insert_prob = 0.2;
+		} else {
+			insert_prob = 0.67;
+		}
 	} else {
-		insert_prob = 0.67;
+		insert_prob = exporder/(double) scale_up_to;
 	}
 	//double insert_prob = 0.1;
 	//cout << insert_prob << "\n";
@@ -1525,8 +1702,8 @@ int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	// Get averages and add to lists
 	//avg_magn = avg_magn/(double)(nspins); //*effexporder);
 	obs_magn[obs_count] = avg_magn/(double)nspins; // abs(avg_magn);
-	obs_magn_sq[obs_count] = avg_magn_sq/(double)pow(nspins, 2);
-	obs_magn_quad[obs_count] = avg_magn_quad/(double)pow(nspins, 4);
+	obs_magn_sq[obs_count] = avg_magn_sq/(double) pow(nspins, 2);
+	obs_magn_quad[obs_count] = avg_magn_quad/(double) pow(nspins, 4);
 
 	// Evaluate transverse magnetisation (see Sandvik book chapter)
 	// To do so, count all transverse field operators
@@ -1538,9 +1715,9 @@ int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 		}
 	}
 	double trans_magn = 0;
-	trans_magn = count_trans_ops*temp/(double)transfield;
-	obs_trans_magn[obs_count] = trans_magn;
-	obs_trans_magn_sq[obs_count] = pow(trans_magn, 2);
+	trans_magn = count_trans_ops*temp/(double) transfield;
+	obs_trans_magn[obs_count] = trans_magn/(double) nspins;
+	obs_trans_magn_sq[obs_count] = pow(trans_magn, 2)/(double) pow(nspins, 2);
 
 	// Need to implement more observables
 	// ...
