@@ -223,7 +223,7 @@ int main(int argc, char** argv) {
 		
 		// Shift updates to move around bond and transverse-field operators
 		// at little to no cost
-		shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
+		//shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
 
 		// Adjust largest expansion order
 		effexporder = adjust_maxexporder(opstring, effexporder, rng);
@@ -284,7 +284,7 @@ int main(int argc, char** argv) {
 
 			// Shift updates to move around bond and transverse-field operators
 			// at little to no cost
-			shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
+			//shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
 			
 			// Measure observables
 			measure_observables(spins, nspins, bonds, nbonds, opstring,
@@ -816,13 +816,17 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 	uniform_real_distribution<double> uni_dist(0,1);
 	uniform_int_distribution<int> rand_spin(0,nspins-1);
 
+	/*
 	// Find all diagonal transverse-field and identity operators in opstring
+
+	// List of opstring positions of transverse and id ops
 	int tf_op[effexporder] = {0};
 	int id_op[effexporder] = {0};
 	for (int i = 0; i < effexporder; i++) {
 		tf_op[i] = -1;
 		id_op[i] = -1;
 	}
+	// Number of transverse and id ops in the opstring
 	int n_tf = 0;
 	int n_id = 0;
 	for (int p = 0; p < effexporder; p++) {
@@ -859,18 +863,23 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 		// Choose if op will be moved
 		if (uni_dist(rng) < 0.5) {
 			// Proceed with moving op
-			
-			// Choose random identity op
+
 			if (more_tf) {
+				// Choose random transverse-field op
 				uniform_int_distribution<int> rand_op(0,n_tf-1);
 				rand = rand_op(rng);
+				if (rand > n_tf-1 || rand < 0) {
+					cout << "rand " << rand << "\n";
+				}
 				remove_tf = tf_op[rand];
 				insert_id = id_op[i];
 				//cout << "random tf " << n_tf << " " << insert_id << " " << remove_tf << "\n";
 			} else {
+				// Choose random identity op
 				uniform_int_distribution<int> rand_op(0,n_id-1);
+				rand = rand_op(rng);
 				remove_tf = tf_op[i];
-				insert_id = id_op[rand_op(rng)];
+				insert_id = id_op[rand];
 				//cout << "random id " << insert_id << " " << remove_tf << "\n";
 			}
 			// DEBUG
@@ -887,7 +896,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 			opstring[remove_tf][2] = -1;
 
 			if (more_tf) {
-				// Update number of identity operators and list of positions
+				// Drop operator we just moved from list
 				for (int j = 0; j < n_tf-1; j++) {
 					// Is this identity operator the one we just replaced?
 					if (tf_op[j] == remove_tf) {
@@ -913,13 +922,13 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 			}
 		}
 	}
+	*/
 
 	// ----- Now shift bond ops -----
 
 	int randb = -1;
 	int s1i, s2i, s1, s2;
 	double bj_old, bj_new, paccept;
-
 
 	uniform_int_distribution<int> rand_bond(0,nbonds-1);
 
@@ -936,7 +945,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 				randb = rand_bond(rng);
 
 				// Get corresponding spins
-				s1i = bonds[randb][0];	
+				s1i = bonds[randb][0];
 				s1 = spins[s1i];
 				s2i = bonds[randb][1];
 				s2 = spins[s2i];
@@ -948,7 +957,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 				// Check if spins are parallel
 				// if bj < 0, anti-ferromagnetic bond
 				// if bj > 0, ferromagnetic bond
-				if (bj*s1*s2 > 0 && uni_dist(rng) < paccept) {
+				if (bj_new*s1*s2 > 0 && uni_dist(rng) < paccept) {
 					// Shift operator to other bond
 					opstring[p][1] = randb;
 				}
@@ -992,6 +1001,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 		// 3 - longitudinal field op
 		linkops[i] = 0;
 	}
+	bool cross_boundary_link[4*effexporder] = {false};
 
 	// Initialise variables
 	int v0, v1, v2, s1i, s2i, bond, sp, si;
@@ -1077,6 +1087,8 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 	would have to be updated, which might lead to clashes with other
 	operators that aren't involved in the cluster update.
 
+	*/
+
     // Finally, construct links across boundary
 	int first, last, pfirst, plast;
 	for (int i = 0; i < nspins; i++) {
@@ -1088,18 +1100,12 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 			pfirst = floor(first/(double)4);
 			plast = floor(last/(double)4);
 
-			// To avoid bond ops linking to themselves and
-			// make our lives easier later when tracing loops,
-			// ignore links between bond ops across the periodic
-			// time boundary
-			if ((linkops[first] != 1 || linkops[last] != 1) && pfirst != plast) {
-				links[first] = last;
-				links[last] = first;
-			}
+			links[first] = last;
+			links[last] = first;
+			cross_boundary_link[first] = true;
+			cross_boundary_link[last] = true;
 		}
 	}
-
-	*/
 
 	// ----- Then trace all vertex loops and do flip updates -----
 
@@ -1127,6 +1133,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 		free_spins[i] = 0;
 	}
 	double coin;
+	bool flip_spin[nspins] = {false};
 
 	// Iterate over all vertex legs
 	for (int v = 0; v < 4*effexporder; v++) {
@@ -1180,9 +1187,23 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 						p = floor(currentv/(double)4);
 						linkedp = floor(linkedv/(double)4);
 						
-						// Set ops flippable
-						spinops_loop[p] = true;
-						spinops_loop[linkedp] = true;
+						// Check if the two ops are different
+						if (p != linkedp) {
+							// Set ops flippable
+							spinops_loop[p] = true;
+							spinops_loop[linkedp] = true;
+
+							// Check if cluster reaches across time boundary
+							if (cross_boundary_link[linkedv]) {
+								// Cluster is across boundary, so get spin index and
+								// set "to be flipped"
+								si = opstring[linkedp][2];
+								flip_spin[si] = true;
+							}
+						} else {
+							// Same operator, so cannot flip
+							fliploop = false;
+						}
 
 						// Stop further loop from happening
 						cont = false;
@@ -1260,6 +1281,22 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 							if (linkops[linkedv] == 1) {
 								// !! why do what's below ??
 
+								// Check if cluster reaches across time boundary
+								if (cross_boundary_link[linkedv]) {
+									// Cluster is across boundary, so get spin index and
+									// set "to be flipped"
+									bond = opstring[linkedp][1];
+									s1i = bonds[bond][0];
+									s2i = bonds[bond][1];
+									if ((linkedv-4*linkedp) == 3 || (linkedv-4*linkedp) == 1) {
+										flip_spin[s2i] = true;
+									} else if ((linkedv-4*linkedp) == 2 || (linkedv-4*linkedp) == 0) {
+										flip_spin[s1i] = true;
+									} else {
+										cout << "ahah" << "\n";
+									}
+								}
+
 								// Check if linked bond op is already part of loop
 								if (!bondops_loop[linkedp]) {
 									// This SHOULD NOT happen, a mere safety measure
@@ -1281,6 +1318,14 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 									// Add spin op to list of ops that should be flipped
 									
 									spinops_loop[linkedp] = true;
+									
+									// Check if link reaches across time boundary
+									if (cross_boundary_link[linkedv]) {
+										// Cluster is across boundary, so get spin index and
+										// set "to be flipped"
+										si = opstring[linkedp][2];
+										flip_spin[si] = true;
+									}
 								}
 							} else {
 								// This leg isn't connected to anything
@@ -1310,6 +1355,12 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
                         free_spins[sp] = 2;
                     }
                 }
+				// Cluster has been flipped, so add flippable spins to list
+				for (int s = 0; s < nspins; s++) {
+					if (flip_spin[s]) {
+						firsts[s] = -2;
+					}
+				}
             } else {
 				// Loop isn't flipped
 				// ...
@@ -1321,6 +1372,10 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 		for (int i = 0; i < effexporder; i++) {
 			bondops_loop[i] = false;
 			spinops_loop[i] = false;
+		}
+		// ? Necessary ?
+		for (int s = 0; s < nspins; s++) {
+			flip_spin[s] = false;
 		}
     }
 
@@ -1335,10 +1390,10 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 			if (uni_dist(rng) < 0.5) {
 				spins[i] *= -1;
 			}
-		} else if (free_spins[i] == 2) {
+		} else if (firsts[i] == -2) {
 			// Spin isn't free but is part of a cluster that has been flipped
-			//spins[i] *= -1;
-			//cout << i << " flipped spin" << spins[i] << "\n";
+			// across the periodic time boundary
+			spins[i] *= -1;
 		}
 
 		// Reset free-ness of spin
