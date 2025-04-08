@@ -26,12 +26,8 @@ configuration file (*setup.txt*) containing details such as the number of sweeps
 	```g++ qmc.cpp -g -o qmc```
 4. Run executable with inline parameters:
 	```./qmc {output directoy} {temperature} {transverse field} {longitudinal field}```
-5. The programme will generate two output files; *spins.txt* and *opstring.txt*, which will be used automatically as input
+5. The programme will generate two output files, *spins.txt* and *opstring.txt*, which will be used automatically as input
 	if a subsequent simulation is ran in the same directory.
-
-## Equilibration issues
-
-At low temperature, he results of this algorithm will depend slightly on the choice of initial (periodic) state ...
 
 ## Licenses
 
