@@ -148,17 +148,10 @@ int main(int argc, char** argv) {
 	// ----- Start Monte Carlo sweeps -----
 
 	// Set initial truncated (effective) expansion order
-	int maxexporder = 10;
-	int effexporder = maxexporder;
+	int effexporder = 10;
 
 	// Initialise operator string
 	int opstring[100000][3] = {};
-	/*for (int i = 0; i < effexporder; i++) {
-		//opstring.push_back(vector<int> {0, -1, -1});
-		opstring[i][0] = 0;
-		opstring[i][1] = -1;
-		opstring[i][2] = -1;
-	}*/
 
 	for (int p = 0; p < 100000; p++) {
 		// Type of operator at position p
@@ -441,9 +434,6 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 					} else {
 						paccept = (1/temp) * 3 * nbonds * abs(bj) /(double) (2*(effexporder - exporder)); // spin 1/2
 					}
-					
-						//cout << "in" << exporder << "\t" << effexporder << "\t" << 1/temp 
-								//<< "\t" << nbonds << "\t" << bj << "\t" << paccept << "\n";
 
 					// Attempt move
 					coin = uni_dist(rng);
@@ -818,9 +808,8 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 	uniform_real_distribution<double> uni_dist(0,1);
 	uniform_int_distribution<int> rand_spin(0,nspins-1);
 
+	// ----- First, swap exchange operators and identity operators -----
 	
-	// Find all diagonal transverse-field and identity operators in opstring
-
 	// List of opstring positions of transverse and id ops
 	int tf_op[effexporder] = {0};
 	int id_op[effexporder] = {0};
@@ -828,7 +817,8 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 		tf_op[i] = -1;
 		id_op[i] = -1;
 	}
-	// Number of transverse and id ops in the opstring
+	// Iterate over opstring and count number of 
+	// transverse and id ops in the opstring
 	int n_tf = 0;
 	int n_id = 0;
 	for (int p = 0; p < effexporder; p++) {
@@ -842,9 +832,6 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 			n_tf++;
 		}
 	}
-
-	//cout << "before: number of id " << n_id << "\n";
-	//cout << "before: number of tf " << n_tf << "\n";
 
 	int remove_tf = -1, insert_id = -1, insert_spin = -1, offset = 0,
 		loop_until = 0, rand = -1;
@@ -867,22 +854,14 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 				// Choose random transverse-field op
 				uniform_int_distribution<int> rand_op(0,n_tf-1);
 				rand = rand_op(rng);
-				if (rand > n_tf-1 || rand < 0) {
-					cout << "rand " << rand << "\n";
-				}
 				remove_tf = tf_op[rand];
 				insert_id = id_op[i];
-				//cout << "random tf " << n_tf << " " << insert_id << " " << remove_tf << "\n";
 			} else {
 				// Choose random identity op
 				uniform_int_distribution<int> rand_op(0,n_id-1);
 				rand = rand_op(rng);
 				remove_tf = tf_op[i];
 				insert_id = id_op[rand];
-				if (rand > n_id-1 || rand < 0) {
-					cout << "rand " << rand << "\n";
-				}
-				//cout << "random id " << insert_id << " " << remove_tf << "\n";
 			}
 			// DEBUG
 			if (remove_tf == -1 || insert_id == -1) {
@@ -891,9 +870,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 			
 			// Swap ops
 			opstring[insert_id][0] = 1;
-			//cout << "insert remove " << insert_id << " " << remove_tf << "\n";
 			insert_spin = rand_spin(rng);
-			//cout << insert_spin << "\n";
 			opstring[insert_id][2] = insert_spin;
 			opstring[remove_tf][0] = 0;
 			opstring[remove_tf][2] = -1;
@@ -910,7 +887,6 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 				}
 				tf_op[n_tf-1] = -1;
 				n_tf--;
-				//cout << "now: number of tf " << n_tf << "\n";
 			} else {
 				// Update number of identity operators and list of positions
 				for (int j = 0; j < n_id-1; j++) {
@@ -923,31 +899,10 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 				}
 				id_op[n_id-1] = -1;
 				n_id--;
-				//cout << "now: number of id " << n_id << "\n";
 			}
 		}
 		offset = 0;
 	}
-
-	/*
-	// Number of transverse and id ops in the opstring
-	n_tf = 0;
-	n_id = 0;
-	for (int p = 0; p < effexporder; p++) {
-		if (opstring[p][0] == 0) {
-			// Identity operator
-			id_op[n_id] = p;
-			n_id++;
-		} else if (opstring[p][0] == 1 && opstring[p][2] > -1) {
-			// Diagonal transverse-field operator
-			tf_op[n_tf] = p;
-			n_tf++;
-		}
-	}
-
-	cout << "after: number of id " << n_id << "\n";
-	cout << "after: number of tf " << n_tf << "\n";
-	*/
 
 	// ----- Now shift bond ops -----
 
@@ -1105,15 +1060,6 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 			lasts[sp] = v0+2;
 		}
 	}
-
-	/* LEGACY - need to figure this out !
-	
-	Deactivate cross-boundary links completely to avoid illegal moves,
-	where two operators are updates and consequently the periodic state
-	would have to be updated, which might lead to clashes with other
-	operators that aren't involved in the cluster update.
-
-	*/
 
     // Finally, construct links across boundary
 	int first = 0, last = 0, pfirst = 0, plast = 0;
@@ -1311,8 +1257,6 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 										flip_spin[s2i] = true;
 									} else if ((linkedv-4*linkedp) == 2 || (linkedv-4*linkedp) == 0) {
 										flip_spin[s1i] = true;
-									} else {
-										cout << "ahah" << "\n";
 									}
 								}
 
@@ -1418,8 +1362,6 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 		// Reset free-ness of spin
 		free_spins[i] = 0;
 	}
-	
-	//cout << "sweep\n";
 
 	return 0;
 
@@ -1445,7 +1387,6 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng, int sca
 	// To distribute operators in new opstring evenly, define
 	// insertion probability
 	int ops_inserted, old_op = 0;
-	//double insert_prob = (newexporder-exporder)/(double)(newexporder+1);
 	double insert_prob = 0;
 	
 	// Is there a target max expansion order?
@@ -1461,8 +1402,6 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng, int sca
 	} else {
 		insert_prob = exporder/(double) scale_up_to;
 	}
-	//double insert_prob = 0.1;
-	//cout << insert_prob << "\n";
 
 	// Initialise variables
 	int newopstring[100000][3];
@@ -1502,10 +1441,8 @@ int adjust_maxexporder(int opstring[][3], int effexporder, mt19937 &rng, int sca
 		}
 	}
 
-	// If no operators are in the opstring, set the new exporder
-	// as 1
+	// If no operators are in the opstring, set the new max exporder as 5
 	newexporder = (opcount > 0) ? opcount : 5;
-	//cout << newexporder << "\n";
 
 	for (int p = 0; p < newexporder; p++) {
 		opstring[p][0] = newopstring[p][0];
@@ -1583,38 +1520,10 @@ int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 
 			// Iterate over all spins
 			for (int i = 0; i < nspins; i++) {
-				// Initial spin state
-				//spin = spins_mod[i];
-				//cout << spin;
-				
-				/*
-				// For each spin, iterate over opstring
-				for (int p = 0; p < effexporder; p++) {
-					avg_magn += double(spin);
-					// Check if an off-diagonal operator is acting on this spin
-					if (opstring[p][0] == 2 && opstring[p][2] == i) {
-						spin = spin*(double)(-1);
-					}
-				}
-				*/
-				
-				// DEBUG
-				/*
-				if (spin != spin) {
-					cout << "spin is nan" << "\n";
-				}
-				*/
-
 				magn += spins_mod[i];
 			}
 
 			avg_magn += abs(magn)/(double)divideby;
-
-			// DEBUG
-			if (avg_magn != avg_magn) {
-				cout << "avg_magn is nan" << "\n";
-			}
-
 			avg_magn_sq += pow(magn, 2)/(double)divideby;
 			avg_magn_quad += pow(magn, 4)/(double)divideby;
 			
@@ -1670,7 +1579,7 @@ int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	obs_trans_magn[obs_count] = trans_magn/(double) nspins;
 	obs_trans_magn_sq[obs_count] = pow(trans_magn, 2)/(double) pow(nspins, 2);
 
-	// Need to implement more observables
+	// Need to implement more observables ?
 	// ...
 
 	return 0;
