@@ -67,9 +67,9 @@ int main(int argc, char** argv) {
 	int nbonds = stoi(in_nbonds);
 
 	// Then, initialise arrays for all spins and bonds
-	int spins[nspins];
-	int bonds[nbonds][2];
-	double couplings[nbonds];
+	int spins[nspins] =  {0};
+	int bonds[nbonds][2] = {0};
+	double couplings[nbonds] = {0};
 
 	// Read in bonds
 	string myline[4];
@@ -222,8 +222,8 @@ int main(int argc, char** argv) {
 		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 		
 		// Shift updates to move around bond and transverse-field operators
-		// at little to no cost
-		//shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
+		// at little to no costf
+		shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
 
 		// Adjust largest expansion order
 		effexporder = adjust_maxexporder(opstring, effexporder, rng);
@@ -284,7 +284,7 @@ int main(int argc, char** argv) {
 
 			// Shift updates to move around bond and transverse-field operators
 			// at little to no cost
-			//shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
+			shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
 			
 			// Measure observables
 			measure_observables(spins, nspins, bonds, nbonds, opstring,
@@ -396,12 +396,12 @@ int diagonal_updates(int spins[], int nspins, int bonds[][2], double couplings[]
 	}
 
 	// Initialise variables
-	int op_type, randb, rands, s1i, s1, s2i, s2, si;
-	double coin, paccept, bj;
+	int op_type = 0, randb = 0, rands = 0, s1i = 0, s1 = 0, s2i = 0, s2 = 0, si = 0;
+	double coin = 0, paccept = 0, bj = 0;
 
 	// Set up acceptance probabilities
-	double paccept_insert_bond, paccept_insert_trans, paccept_insert_long,
-		paccept_remove_bond, paccept_remove_trans, paccept_remove_long = 0;
+	double paccept_insert_bond = 0, paccept_insert_trans = 0, paccept_insert_long = 0,
+		paccept_remove_bond = 0, paccept_remove_trans = 0, paccept_remove_long = 0;
 	
 	// Iterate over all positions p in operator string
 	for (int p = 0; p < effexporder; p++) {
@@ -599,19 +599,19 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	// ----- Construct vertex link list -----
 
 	// List of first and last vertex legs of each spin
-	int firsts[nspins];
-	int lasts[nspins];
+	int firsts[nspins] = {0};
+	int lasts[nspins] = {0};
 	for (int i = 0; i < nspins; i++) {
 		firsts[i] = -1;
 		lasts[i] = -1;
 	}
 	// List of vertex links
-	int links[4*effexporder];
+	int links[4*effexporder] = {0};
 	for (int i = 0; i < 4*effexporder; i++) {
 		links[i] = -1;
 	}
 	// List of operator types each vertex leg belongs to
-	int linkops[4*effexporder];
+	int linkops[4*effexporder] = {0};
 	for (int i = 0; i < 4*effexporder; i++) {
 		// This encodes the type of operator each
 		// vertex leg belongs too
@@ -623,7 +623,7 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	}
 
 	// Initialise variables
-	int v0, v1, v2, s1i, s2i, bond, sp, si;
+	int v0 = 0, v1 = 0, v2 = 0, s1i = 0, s2i = 0, bond = 0, sp = 0, si = 0;
 
 	// First, deal with links within bounds of opstring
 	// To do this, iterate over opstring
@@ -673,8 +673,9 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	// ----- Then trace all vertex loops and do flip updates -----
 
 	// Initialise variables
-	bool finished, fliploop, allspinops, cont, bondops_loop[effexporder],
-        spins_loop[nspins], visited[4*effexporder];
+	bool finished = false, fliploop = true, allspinops = false,
+		cont = false, bondops_loop[effexporder] = {false},
+        spins_loop[nspins] = {false}, visited[4*effexporder] = {false};
 	for (int i = 0; i < 4*effexporder; i++) {
 		visited[i] = false;
 	}
@@ -684,8 +685,9 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	for (int i = 0; i < nspins; i++) {
 		spins_loop[i] = false;
 	}
-	int currentv, linkedv, lastv, i, p, linkedp, change_counter, bi;
-	double coin;
+	int currentv = 0, linkedv = 0, lastv = 0, i = 0, p = 0, 
+		linkedp = 0, change_counter = 0, bi = 0;
+	double coin = 0;
 
 	// Iterate over all vertex legs
 	for (int v = 0; v < 4*effexporder; v++) {
@@ -816,7 +818,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 	uniform_real_distribution<double> uni_dist(0,1);
 	uniform_int_distribution<int> rand_spin(0,nspins-1);
 
-	/*
+	
 	// Find all diagonal transverse-field and identity operators in opstring
 
 	// List of opstring positions of transverse and id ops
@@ -841,14 +843,11 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 		}
 	}
 
+	//cout << "before: number of id " << n_id << "\n";
 	//cout << "before: number of tf " << n_tf << "\n";
 
-	int remove_tf = -1;
-	int insert_id = -1;
-	int insert_spin = -1;
-	int offset = 0;
-	int loop_until = 0;
-	int rand = -1;
+	int remove_tf = -1, insert_id = -1, insert_spin = -1, offset = 0,
+		loop_until = 0, rand = -1;
 	
 	// More transverse ops than id ops?
 	bool more_tf = (n_tf > n_id) ? true : false;
@@ -880,6 +879,9 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 				rand = rand_op(rng);
 				remove_tf = tf_op[i];
 				insert_id = id_op[rand];
+				if (rand > n_id-1 || rand < 0) {
+					cout << "rand " << rand << "\n";
+				}
 				//cout << "random id " << insert_id << " " << remove_tf << "\n";
 			}
 			// DEBUG
@@ -889,8 +891,9 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 			
 			// Swap ops
 			opstring[insert_id][0] = 1;
-			//cout << insert_id << " " << remove_tf << "\n";
+			//cout << "insert remove " << insert_id << " " << remove_tf << "\n";
 			insert_spin = rand_spin(rng);
+			//cout << insert_spin << "\n";
 			opstring[insert_id][2] = insert_spin;
 			opstring[remove_tf][0] = 0;
 			opstring[remove_tf][2] = -1;
@@ -907,6 +910,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 				}
 				tf_op[n_tf-1] = -1;
 				n_tf--;
+				//cout << "now: number of tf " << n_tf << "\n";
 			} else {
 				// Update number of identity operators and list of positions
 				for (int j = 0; j < n_id-1; j++) {
@@ -919,16 +923,37 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 				}
 				id_op[n_id-1] = -1;
 				n_id--;
+				//cout << "now: number of id " << n_id << "\n";
 			}
 		}
+		offset = 0;
 	}
+
+	/*
+	// Number of transverse and id ops in the opstring
+	n_tf = 0;
+	n_id = 0;
+	for (int p = 0; p < effexporder; p++) {
+		if (opstring[p][0] == 0) {
+			// Identity operator
+			id_op[n_id] = p;
+			n_id++;
+		} else if (opstring[p][0] == 1 && opstring[p][2] > -1) {
+			// Diagonal transverse-field operator
+			tf_op[n_tf] = p;
+			n_tf++;
+		}
+	}
+
+	cout << "after: number of id " << n_id << "\n";
+	cout << "after: number of tf " << n_tf << "\n";
 	*/
 
 	// ----- Now shift bond ops -----
 
 	int randb = -1;
-	int s1i, s2i, s1, s2;
-	double bj_old, bj_new, paccept;
+	int s1i = 0, s2i = 0, s1 = 0, s2 = 0;
+	double bj_old = 0, bj_new = 0, paccept = 0;
 
 	uniform_int_distribution<int> rand_bond(0,nbonds-1);
 
@@ -952,7 +977,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 
 				// Get coupling constant of bond
 				bj_new = couplings[randb];
-				paccept = bj_new/(double) bj_old;
+				paccept = abs(bj_new/(double) bj_old);
 				
 				// Check if spins are parallel
 				// if bj < 0, anti-ferromagnetic bond
@@ -979,19 +1004,19 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 	// ----- Construct vertex link list -----
 
 	// List of first and last vertex legs of each spin
-	int firsts[nspins];
-	int lasts[nspins];
+	int firsts[nspins] = {0};
+	int lasts[nspins] = {0};
 	for (int i = 0; i < nspins; i++) {
 		firsts[i] = -1;
 		lasts[i] = -1;
 	}
 	// List of vertex links
-	int links[4*effexporder];
+	int links[4*effexporder] = {0};
 	for (int i = 0; i < 4*effexporder; i++) {
 		links[i] = -1;
 	}
 	// List of operator types each vertex leg belongs to
-	int linkops[4*effexporder];
+	int linkops[4*effexporder] = {0};
 	for (int i = 0; i < 4*effexporder; i++) {
 		// This encodes the type of operator each
 		// vertex leg belongs too
@@ -1004,7 +1029,8 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 	bool cross_boundary_link[4*effexporder] = {false};
 
 	// Initialise variables
-	int v0, v1, v2, s1i, s2i, bond, sp, si;
+	int v0 = 0, v1 = 0, v2 = 0, s1i = 0, s2i = 0, bond = 0, 
+		sp = 0, si = 0;
 
 	// First, deal with links within bounds of opstring
 	// To do this, iterate over opstring
@@ -1090,7 +1116,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 	*/
 
     // Finally, construct links across boundary
-	int first, last, pfirst, plast;
+	int first = 0, last = 0, pfirst = 0, plast = 0;
 	for (int i = 0; i < nspins; i++) {
 		first = firsts[i];
 		if (first > -1) {
@@ -1110,17 +1136,10 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 	// ----- Then trace all vertex loops and do flip updates -----
 
 	// Initialise variables
-	bool finished, fliploop, allspinops, cont, bondops_loop[effexporder],
-        spinops_loop[effexporder], visited[4*effexporder];
-	for (int i = 0; i < 4*effexporder; i++) {
-		visited[i] = false;
-	}
-	for (int i = 0; i < effexporder; i++) {
-		bondops_loop[i] = false;
-        spinops_loop[i] = false;
-	}
-	int currentv, linkedv, lastv, i, p, linkedp, change_counter,
-        free_spins[nspins];
+	bool finished = false, fliploop = true, allspinops = false, cont = true, bondops_loop[effexporder] = {false},
+        spinops_loop[effexporder] = {false}, visited[4*effexporder] = {false};
+	int currentv = 0, linkedv = 0, lastv = 0, i = 0, p = 0, linkedp = 0, change_counter = 0,
+        free_spins[nspins] = {false};
 	for (int i = 0; i < nspins; i++) {
 		// This encodes, whether a spin is free or part of
 		// a loop that has been flipped
@@ -1132,7 +1151,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 		// convert this to a bool array)
 		free_spins[i] = 0;
 	}
-	double coin;
+	double coin = 0;
 	bool flip_spin[nspins] = {false};
 
 	// Iterate over all vertex legs
@@ -1507,7 +1526,7 @@ int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 	// ----- Measure internal energy (prop. to expansion order) -----
 
 	// Initialise expansion order
-	int exporder;
+	int exporder = 0;
 
 	// Evaluate current expansion order
 	exporder = effexporder;
@@ -1529,13 +1548,13 @@ int measure_observables(int spins[], int nspins, int bonds[][2], int nbonds,
 
 	// Initialise variables
 	int spin = 0;
-	double avg_magn, avg_magn_sq, avg_magn_quad = 0;
+	double avg_magn = 0, avg_magn_sq = 0, avg_magn_quad = 0;
 	int magn = 0;
 
 	// Initialise variables
-	int s1i, s1, s2i, s2, total_corr = 0;
+	int s1i = 0, s1 = 0, s2i = 0, s2 = 0, total_corr = 0;
 	int corrs[nspins][nspins] = {0};
-	double avg_corr;
+	double avg_corr = 0;
 	bool zerops = false;
 	int iterations = effexporder;
 	int divideby = exporder;

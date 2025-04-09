@@ -23,7 +23,7 @@ configuration file (*setup.txt*) containing details such as the number of sweeps
 	* *avsweeps*: number of averaging MC sweeps per bin per spin
 	* *operator_mode*: type of spin operator; either *pauli* (Pauli matrices) or *one-half* (spin-1/2 operators)
 3. Compile *qmc.cpp*:
-	```g++ qmc.cpp -g -o qmc```
+	```g++ -O3 -march=native qmc.cpp -g -o qmc``` (or using any other C++ compiler of your choice)
 4. Run executable with inline parameters:
 	```./qmc {output directoy} {temperature} {transverse field} {longitudinal field}```
 5. The programme will generate two output files, *spins.txt* and *opstring.txt*, which will be used automatically as input
