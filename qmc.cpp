@@ -791,7 +791,7 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 		}
 		for (int si = 0; si < nspins; si++) {
 			spins_loop[si] = false;
-        }
+    	}
 	}
 
 	// Finally, flip all spins without associated bond ops
@@ -910,9 +910,9 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 		offset = 0;
 	}
 
-	// ----- Now shift bond ops -----
+	// ----- Now shift bond and longfield ops -----
 
-	int randb = -1;
+	int randb = -1, rands = -1;
 	int s1i = 0, s2i = 0, s1 = 0, s2 = 0;
 	double bj_old = 0, bj_new = 0, paccept = 0;
 
@@ -946,6 +946,20 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 				if (bj_new*s1*s2 > 0 && uni_dist(rng) < paccept) {
 					// Shift operator to other bond
 					opstring[p][1] = randb;
+				}
+			}
+		} else if (opstring[p][0] == 3 && opstring[p][2] > -1) {
+			// Longfield operator
+			
+			// Decide whether to attempt shift
+			if (uni_dist(rng) < 0.5) {
+				// Choose random spin to shift to
+				rands = rand_spin(rng);
+
+				// Check if spin is aligned with field
+				if (spins[rands] > 0) {
+					// Shift operator to other bond
+					opstring[p][2] = rands;
 				}
 			}
 		} else if (opstring[p][0] == 2) {
