@@ -207,12 +207,13 @@ int main(int argc, char** argv) {
 		diagonal_updates(spins, nspins, bonds, couplings, nbonds, opstring, 
 				effexporder, temp, transfield, longfield, use_pauli_ops, rng);
 		
-		if (longfield == 0) {
-			flip_spin_clusters(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
-		}
+		// Flip spins in the periodic state that are bonded to each other
+		flip_spin_clusters(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 
-		// Cluster updates to vary diagonal / off-diagonal ops
-		cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
+		if (transfield > 0) {
+			// Cluster updates to vary diagonal / off-diagonal ops
+			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
+		}
 		
 		// Shift updates to move around bond and transverse-field operators
 		// at little to no costf
@@ -268,12 +269,13 @@ int main(int argc, char** argv) {
 			diagonal_updates(spins, nspins, bonds, couplings, nbonds, opstring, 
 					effexporder, temp, transfield, longfield, use_pauli_ops, rng);
 			
-			if (longfield == 0) {
-				flip_spin_clusters(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
-			}
+			// Flip spins in the periodic state that are bonded to each other
+			flip_spin_clusters(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 
-			// Cluster updates to vary diagonal / off-diagonal ops
-			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
+			if (transfield > 0) {
+				// Cluster updates to vary diagonal / off-diagonal ops
+				cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
+			}
 
 			// Shift updates to move around bond and transverse-field operators
 			// at little to no cost
@@ -614,6 +616,8 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 
 	// Initialise variables
 	int v0 = 0, v1 = 0, v2 = 0, s1i = 0, s2i = 0, bond = 0, sp = 0, si = 0;
+	// List of spins - true if it has a longfield op acting on it
+	bool longfield_spins[nspins] = {false};
 
 	// First, deal with links within bounds of opstring
 	// To do this, iterate over opstring
@@ -657,6 +661,9 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 			// Update latest vertex appearance
 			lasts[s1i] = v0+2;
 			lasts[s2i] = v0+3;
+		} else if (opstring[p][0] == 3) {
+			si = opstring[p][2];
+			longfield_spins[si] = true;
 		}
 	}
 
@@ -666,15 +673,6 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	bool finished = false, fliploop = true, allspinops = false,
 		cont = false, bondops_loop[effexporder] = {false},
         spins_loop[nspins] = {false}, visited[4*effexporder] = {false};
-	for (int i = 0; i < 4*effexporder; i++) {
-		visited[i] = false;
-	}
-	for (int i = 0; i < effexporder; i++) {
-		bondops_loop[i] = false;
-	}
-	for (int i = 0; i < nspins; i++) {
-		spins_loop[i] = false;
-	}
 	int currentv = 0, linkedv = 0, lastv = 0, i = 0, p = 0, 
 		linkedp = 0, change_counter = 0, bi = 0;
 	double coin = 0;
@@ -764,8 +762,16 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
                 }
 	        }
 
+			// See if any spins have a long field op acting on them
+			for (int s = 0; s < nspins; s++) {
+				// Check if spin is part of cluster and has a longfield op
+				if (spins_loop[s] && longfield_spins[s]) {
+					fliploop = false;
+				}
+			}
+
             // Check if loop should be flipped
-            if (uni_dist(rng) < 0.5) {
+            if (uni_dist(rng) < 0.5 && fliploop) {
                 // Loop is flippable
 
                 // Iterate over all spin ops and change type
@@ -789,11 +795,11 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	}
 
 	// Finally, flip all spins without associated bond ops
-	for (int si = 0; si < nspins; si++) {
-		// Check if spin op has no associated bond ops
-		if (firsts[si] == -1 && uni_dist(rng) < 0.5) {
+	for (int s = 0; s < nspins; s++) {
+		// Check if spin has no ops associated (or no long field ops)
+		if (firsts[s] == -1 && !longfield_spins[s] && uni_dist(rng) < 0.5) {
 			// Flip spin with 1/2 prob
-			spins[si] *= -1;
+			spins[s] *= -1;
 		}
 	}
 
