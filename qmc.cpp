@@ -199,9 +199,20 @@ int main(int argc, char** argv) {
 	// Mean maximum expansion order
 	double avg_max_exporder = 0;
 	int avg_from = eqsweeps - 1000*nspins;
-
+	
+	ofstream out_file; 
+	out_file.open("equil.txt");
+	out_file << "sweep,n,m\n";
 	// Start equilibration
 	for (int i = 0; i < eqsweeps; i++) {
+		
+		int exporder = effexporder;
+		for (int i = 0; i < effexporder; i++) {
+			if (opstring[i][0] == 0) {
+				exporder = exporder - 1;
+			}
+		}
+		out_file << i << "," << exporder << "," << effexporder << "\n";
 
 		// Diagonal updates to insert / remove operators
 		diagonal_updates(spins, nspins, bonds, couplings, nbonds, opstring, 
@@ -228,6 +239,8 @@ int main(int argc, char** argv) {
 
 	}
 
+	out_file.close();
+
 	// Set new maximum expansion order and scale opstring
 	int new_maxexporder = ceil(avg_max_exporder);
 	effexporder = adjust_maxexporder(opstring, effexporder, rng, new_maxexporder);
@@ -238,7 +251,7 @@ int main(int argc, char** argv) {
 	cout << flush;
 
 	// Open output file
-	ofstream out_file; 
+	//ofstream out_file; 
 	out_file.open(out_path+"/results_t_"+to_string(temp)+"_g_"+to_string(transfield)+"_h_"+to_string(longfield)+".csv");
 	out_file << "bin,exporder,exporder_sq,magn,magn_sq,magn_quad,trans_magn,trans_magn_sq\n";
 	
@@ -623,7 +636,7 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	// To do this, iterate over opstring
 	for (int p = 0; p < effexporder; p++) {
 		// Check if operator at p is acting on bonds or spins
-		if (opstring[p][0] > 0 && opstring[p][1] > -1) {
+		if (opstring[p][0] == 1 && opstring[p][1] > -1) {
 			// Operator is acting on bonds
 
 			// Set vertex index
@@ -672,7 +685,8 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	// Initialise variables
 	bool finished = false, fliploop = true, allspinops = false,
 		cont = false, bondops_loop[effexporder] = {false},
-        spins_loop[nspins] = {false}, visited[4*effexporder] = {false};
+        spins_loop[nspins] = {false}, visited[4*effexporder] = {false},
+		visited_bondops[effexporder] = {false};
 	int currentv = 0, linkedv = 0, lastv = 0, i = 0, p = 0, 
 		linkedp = 0, change_counter = 0, bi = 0;
 	double coin = 0;
@@ -719,8 +733,11 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 
                 // Iterate over all operators
                 for (int pi = 0; pi < effexporder; pi++) {
-                    if (bondops_loop[pi]) {
+                    if (bondops_loop[pi] && !visited_bondops[pi]) {
                         // Iterate over legs of op
+						
+						visited_bondops[pi] = true;
+
                         // Go through legs belonging to bond op
                         for (int i = 0; i < 4; i++) {
                             // Get current vertex leg
@@ -788,6 +805,7 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 		// Empty list of bond and spin ops in loop
 		for (int i = 0; i < effexporder; i++) {
 			bondops_loop[i] = false;
+			visited_bondops[i] = false;
 		}
 		for (int si = 0; si < nspins; si++) {
 			spins_loop[si] = false;
@@ -1102,8 +1120,9 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 	// ----- Then trace all vertex loops and do flip updates -----
 
 	// Initialise variables
-	bool finished = false, fliploop = true, allspinops = false, cont = true, bondops_loop[effexporder] = {false},
-        spinops_loop[effexporder] = {false}, visited[4*effexporder] = {false};
+	bool finished = false, fliploop = true, allspinops = false, cont = true, 
+		bondops_loop[effexporder] = {false}, spinops_loop[effexporder] = {false}, 
+		visited[4*effexporder] = {false}, visited_bondops[effexporder] = {false};
 	int currentv = 0, linkedv = 0, lastv = 0, i = 0, p = 0, linkedp = 0, change_counter = 0,
         free_spins[nspins] = {false};
 	for (int i = 0; i < nspins; i++) {
@@ -1203,8 +1222,11 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 
                 // Iterate over all operators
                 for (int pi = 0; pi < effexporder; pi++) {
-                    if (bondops_loop[pi]) {
+                    if (bondops_loop[pi] && !visited_bondops[pi]) {
                         // Iterate over legs of op
+						
+						visited_bondops[pi] = true;
+
                         // Go through legs belonging to bond op
                         for (int i = 0; i < 4; i++) {
                             // Get current vertex leg
@@ -1355,6 +1377,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 		for (int i = 0; i < effexporder; i++) {
 			bondops_loop[i] = false;
 			spinops_loop[i] = false;
+			visited_bondops[i] = false;
 		}
 		// ? Necessary ?
 		for (int s = 0; s < nspins; s++) {
