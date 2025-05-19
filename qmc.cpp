@@ -200,20 +200,9 @@ int main(int argc, char** argv) {
 	double avg_max_exporder = 0;
 	int avg_from = eqsweeps - 1000*nspins;
 	
-	ofstream out_file; 
-	out_file.open("equil.txt");
-	out_file << "sweep,n,m\n";
 	// Start equilibration
 	for (int i = 0; i < eqsweeps; i++) {
 		
-		int exporder = effexporder;
-		for (int i = 0; i < effexporder; i++) {
-			if (opstring[i][0] == 0) {
-				exporder = exporder - 1;
-			}
-		}
-		out_file << i << "," << exporder << "," << effexporder << "\n";
-
 		// Diagonal updates to insert / remove operators
 		diagonal_updates(spins, nspins, bonds, couplings, nbonds, opstring, 
 				effexporder, temp, transfield, longfield, use_pauli_ops, rng);
@@ -239,8 +228,6 @@ int main(int argc, char** argv) {
 
 	}
 
-	out_file.close();
-
 	// Set new maximum expansion order and scale opstring
 	int new_maxexporder = ceil(avg_max_exporder);
 	effexporder = adjust_maxexporder(opstring, effexporder, rng, new_maxexporder);
@@ -251,7 +238,7 @@ int main(int argc, char** argv) {
 	cout << flush;
 
 	// Open output file
-	//ofstream out_file; 
+	ofstream out_file; 
 	out_file.open(out_path+"/results_t_"+to_string(temp)+"_g_"+to_string(transfield)+"_h_"+to_string(longfield)+".csv");
 	out_file << "bin,exporder,exporder_sq,magn,magn_sq,magn_quad,trans_magn,trans_magn_sq\n";
 	
