@@ -677,6 +677,13 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 	int currentv = 0, linkedv = 0, lastv = 0, i = 0, p = 0, 
 		linkedp = 0, change_counter = 0, bi = 0;
 	double coin = 0;
+	// List of operator positions just added to a forming cluster
+	vector<int> added_ops_before = {};
+	vector<int> added_ops_after = {};
+	// Allocate enough space to cover entire opstring if need be,
+	// to avoid reallocation later on
+	added_ops_before.reserve(effexporder);
+	added_ops_after.reserve(effexporder);
 
 	// Iterate over all vertex legs
 	for (int v = 0; v < 4*effexporder; v++) {
@@ -700,6 +707,7 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
                 
                 // Operator is part of loop
                 bondops_loop[p] = true;
+				added_ops_before.push_back(p);
 
 				// Get spins belonging to bond
 				bi = opstring[p][1];
@@ -719,46 +727,49 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
                 change_counter = 0;
 
                 // Iterate over all operators
-                for (int pi = 0; pi < effexporder; pi++) {
-                    if (bondops_loop[pi] && !visited_bondops[pi]) {
-                        // Iterate over legs of op
+				for (int pi : added_ops_before) {
+					// Iterate over legs of op
+					
+					visited_bondops[pi] = true;
+
+					// Go through legs belonging to bond op
+					for (int i = 0; i < 4; i++) {
+						// Get current vertex leg
+						currentv = 4*pi+i;
+						visited[currentv] = true;
 						
-						visited_bondops[pi] = true;
+						linkedv = links[currentv];
+						
+						// Check if leg is linked to anything
+						if (linkedv > -1) {
+							// Leg is linked to something, so get linked op
+							linkedp = floor(linkedv/(double)4);
+							// Check if this linked op is a bond op
+							if (linkops[linkedv] == 1) {
+								// Check if bond op is already part of loop
+								if (!bondops_loop[linkedp]) {
+									// Bond op hasn't been added yet, so add it
+									bondops_loop[linkedp] = true;
+									added_ops_after.push_back(p);
+									change_counter++;
 
-                        // Go through legs belonging to bond op
-                        for (int i = 0; i < 4; i++) {
-                            // Get current vertex leg
-                            currentv = 4*pi+i;
-                            visited[currentv] = true;
-                            
-                            linkedv = links[currentv];
-							
-							// Check if leg is linked to anything
-							if (linkedv > -1) {
-								// Leg is linked to something, so get linked op
-								linkedp = floor(linkedv/(double)4);
-								// Check if this linked op is a bond op
-								if (linkops[linkedv] == 1) {
-									// Check if bond op is already part of loop
-									if (!bondops_loop[linkedp]) {
-										// Bond op hasn't been added yet, so add it
-										bondops_loop[linkedp] = true;
-										change_counter++;
+									// Get spins belonging to bond
+									bi = opstring[linkedp][1];
+									s1i = bonds[bi][0];
+									s2i = bonds[bi][1];
 
-										// Get spins belonging to bond
-										bi = opstring[linkedp][1];
-										s1i = bonds[bi][0];
-										s2i = bonds[bi][1];
-
-										// Set spins as part of cluster
-										spins_loop[s1i] = true;
-										spins_loop[s2i] = true;
-									}
+									// Set spins as part of cluster
+									spins_loop[s1i] = true;
+									spins_loop[s2i] = true;
 								}
 							}
-                        }
-                    }
+						}
+					}
                 }
+
+				// For next iteration, use newly added ops
+				added_ops_before.swap(added_ops_after);
+				added_ops_after.clear();
 
 				// If loop hasn't grown in this iteration, finish the loop
                 if (change_counter == 0) {
@@ -1126,6 +1137,14 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 	double coin = 0;
 	bool flip_spin[nspins] = {false};
 
+	// List of operator positions just added to a forming cluster
+	vector<int> added_ops_before = {};
+	vector<int> added_ops_after = {};
+	// Allocate enough space to cover entire opstring if need be,
+	// to avoid reallocation later on
+	added_ops_before.reserve(effexporder);
+	added_ops_after.reserve(effexporder);
+
 	// Iterate over all vertex legs
 	for (int v = 0; v < 4*effexporder; v++) {
 		// Check if vertex leg is connected to any other legs
@@ -1149,6 +1168,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
                 
                 // Operator is part of loop
                 bondops_loop[p] = true;
+				added_ops_before.push_back(p);
             } else if (linkops[currentv] == 2) {
                 // Initial leg belongs to transverse field op
 
@@ -1169,6 +1189,7 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 						
 						// Operator is part of loop
 						bondops_loop[p] = true;
+						added_ops_before.push_back(p);
 					} else if (linkops[linkedv] == 2) {
 						// Linked to spin op
 
@@ -1208,37 +1229,40 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
                 change_counter = 0;
 
                 // Iterate over all operators
-                for (int pi = 0; pi < effexporder; pi++) {
-                    if (bondops_loop[pi] && !visited_bondops[pi]) {
-                        // Iterate over legs of op
-						
-						visited_bondops[pi] = true;
+				for (int pi : added_ops_before) {
+					// Iterate over legs of op
+					
+					visited_bondops[pi] = true;
 
-                        // Go through legs belonging to bond op
-                        for (int i = 0; i < 4; i++) {
-                            // Get current vertex leg
-                            currentv = 4*pi+i;
-                            visited[currentv] = true;
-                            
-                            linkedv = links[currentv];
-							
-							// Check if leg is linked to anything
-							if (linkedv > -1) {
-								// Leg is linked to something, so get linked op
-								linkedp = floor(linkedv/(double)4);
-								// Check if this linked op is a bond op
-								if (linkops[linkedv] == 1) {
-									// Check if bond op is already part of loop
-									if (!bondops_loop[linkedp]) {
-										// Bond op hasn't been added yet, so add it
-										bondops_loop[linkedp] = true;
-										change_counter++;
-									}
+					// Go through legs belonging to bond op
+					for (int i = 0; i < 4; i++) {
+						// Get current vertex leg
+						currentv = 4*pi+i;
+						visited[currentv] = true;
+						
+						linkedv = links[currentv];
+						
+						// Check if leg is linked to anything
+						if (linkedv > -1) {
+							// Leg is linked to something, so get linked op
+							linkedp = floor(linkedv/(double)4);
+							// Check if this linked op is a bond op
+							if (linkops[linkedv] == 1) {
+								// Check if bond op is already part of loop
+								if (!bondops_loop[linkedp]) {
+									// Bond op hasn't been added yet, so add it
+									bondops_loop[linkedp] = true;
+									added_ops_after.push_back(linkedp);
+									change_counter++;
 								}
 							}
-                        }
-                    }
-                }
+						}
+					}
+				}
+
+				// For next iteration, use newly added ops
+				added_ops_before.swap(added_ops_after);
+				added_ops_after.clear();
 
 				// If loop hasn't grown in this iteration, finish the loop
                 if (change_counter == 0) {
