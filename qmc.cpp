@@ -215,8 +215,7 @@ int main(int argc, char** argv) {
 			cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 		}
 		
-		// Shift updates to move around bond and transverse-field operators
-		// at little to no costf
+		// Shift updates to move around bond, transverse field, and longitudinal field operators
 		shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
 
 		// Adjust largest expansion order
@@ -277,8 +276,7 @@ int main(int argc, char** argv) {
 				cluster_updates(spins, nspins, bonds, nbonds, opstring, effexporder, rng);
 			}
 
-			// Shift updates to move around bond and transverse-field operators
-			// at little to no cost
+			// Shift updates to move around bond, transverse field, and longitudinal field operators
 			shift_update(opstring, effexporder, spins, nspins, bonds, couplings, nbonds, rng);
 			
 			// Measure observables
@@ -929,11 +927,112 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 	// ----- Now shift bond and longfield ops -----
 
 	int randb = -1, rands = -1;
-	int s1i = 0, s2i = 0, s1 = 0, s2 = 0;
+	int si = 0, s1i = 0, s2i = 0, s1 = 0, s2 = 0;
 	double bj_old = 0, bj_new = 0, paccept = 0;
 
 	uniform_int_distribution<int> rand_bond(0,nbonds-1);
 
+	// First, generate list of all identity operators and find FM/AFM bonds
+	vector<int> idops = {};
+	int spinstates[effexporder][nspins] = {0};
+	for (int p = 0; p < effexporder; p++) {
+		// Take record of current spin state
+		for (int i = 0; i < nspins; i++) {
+			spinstates[p][i] = spins[i];
+		}
+		
+		// Check type of operator at current position in opstring
+		if (opstring[p][0] == 0) {
+			// Identity operator
+			idops.push_back(p);
+		} else if (opstring[p][0] == 2 && opstring[p][2] > -1) {
+			// Off-diagonal bond operator
+
+			// Adjust current spin state
+			si = opstring[p][2];
+			spins[si] *= -1;
+		}
+	}
+	
+	// Now iterate over opstring and try to move ops
+	uniform_int_distribution<int> rand_op_position(-1,idops.size()-1);
+	int insert_op = -1, rand_pi = -1, rand_pos = 0;
+	for (int p = 0; p < effexporder; p++) {
+		// Determine position we'll to try to move next non-identity operator to
+		rand_pi = rand_op_position(rng);
+		// Allow for possibility of operator staying at same position in opstring
+		if (rand_pi == -1) {
+			rand_pos = p;
+		} else {
+			rand_pos = idops[rand_pi];
+		}
+
+		// Determine type of operator at position p
+		if (opstring[p][0] == 1 && opstring[p][1] > -1) {
+			// Bond operator
+			
+			// Decide whether to attempt shift
+			if (uni_dist(rng) < 0.5) {
+				// Get current coupling constant
+				bj_old = couplings[opstring[p][1]];
+
+				// Choose random bond to shift to
+				randb = rand_bond(rng);
+
+				// Get corresponding spins
+				s1i = bonds[randb][0];
+				s1 = spinstates[rand_pos][s1i];
+				s2i = bonds[randb][1];
+				s2 = spinstates[rand_pos][s2i];
+
+				// Get coupling constant of bond
+				bj_new = couplings[randb];
+				paccept = abs(bj_new/(double) bj_old);
+				
+				// Check if spins are parallel
+				// if bj < 0, anti-ferromagnetic bond
+				// if bj > 0, ferromagnetic bond
+				if (bj_new*s1*s2 > 0 && uni_dist(rng) < paccept) {
+					// Shift operator to new position
+					opstring[rand_pos][0] = 1;
+					opstring[rand_pos][1] = randb;
+					opstring[p][0] = 0;
+					opstring[p][1] = -1;
+					if (rand_pi > -1) {
+						// Remove identity op we've replaced from list
+						idops.erase(idops.begin()+rand_pi);
+						// Add new identity op we've just created to list
+						idops.push_back(p);
+					}
+				}
+			}
+		} else if (opstring[p][0] == 3 && opstring[p][2] > -1) {
+			// Longfield operator
+			
+			// Decide whether to attempt shift
+			if (uni_dist(rng) < 0.5) {
+				// Choose random spin to shift to
+				rands = rand_spin(rng);
+
+				// Check if spin is aligned with field
+				if (spinstates[rand_pos][rands] > 0) {
+					// Shift operator to new position
+					opstring[rand_pos][0] = 3;
+					opstring[rand_pos][2] = rands;
+					opstring[p][0] = 0;
+					opstring[p][2] = -1;
+					if (rand_pi > -1) {
+						// Remove identity op we've replaced from list
+						idops.erase(idops.begin()+rand_pi);
+						// Add new identity op we've just created to list
+						idops.push_back(p);
+					}
+				}
+			}
+		}
+	}
+
+	/*
 	for (int p = 0; p < effexporder; p++) {
 		if (opstring[p][0] == 1 && opstring[p][1] > -1) {
 			// Bond operator
@@ -982,6 +1081,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 			spins[opstring[p][2]] *= -1;
 		}
 	}
+	*/
 
 	return 0;
 }
@@ -1156,12 +1256,11 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 
             // Set current leg as initial leg
 			currentv = v;
+			visited[currentv] = true;
 
             // See if initial leg belongs to bond or spin op
             if (linkops[currentv] == 1) {
                 // Initial leg belongs to bond op
-
-				visited[currentv] = true;
 
                 // Get opstring index
                 p = floor(currentv/(double)4);
@@ -1171,8 +1270,6 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 				added_ops_before.push_back(p);
             } else if (linkops[currentv] == 2) {
                 // Initial leg belongs to transverse field op
-
-                visited[currentv] = true;
 
                 // Get linked leg
                 linkedv = links[currentv];
@@ -1297,8 +1394,6 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
 						if (linkedv > -1) {
 							// Check if this linked op is a bond op or spin op
 							if (linkops[linkedv] == 1) {
-								// !! why do what's below ??
-
 								// Check if cluster reaches across time boundary
 								if (cross_boundary_link[linkedv]) {
 									// Cluster is across boundary, so get spin index and
