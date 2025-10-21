@@ -726,8 +726,6 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 
                 // Iterate over all operators
 				for (int pi : added_ops_before) {
-					// Iterate over legs of op
-					
 					visited_bondops[pi] = true;
 
 					// Go through legs belonging to bond op
@@ -748,7 +746,7 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
 								if (!bondops_loop[linkedp]) {
 									// Bond op hasn't been added yet, so add it
 									bondops_loop[linkedp] = true;
-									added_ops_after.push_back(p);
+									added_ops_after.push_back(linkedp);
 									change_counter++;
 
 									// Get spins belonging to bond
@@ -766,14 +764,38 @@ int flip_spin_clusters(int spins[], int nspins, int bonds[][2],
                 }
 
 				// For next iteration, use newly added ops
+				/* DEBUG cout << "before ";
+				for (int pi : added_ops_before) {
+					cout << pi << " ";
+				}
+				cout << "\n";
+				cout << "after ";
+				for (int pi : added_ops_after) {
+					cout << pi << " ";
+				}
+				cout << "\n"; */
 				added_ops_before.swap(added_ops_after);
 				added_ops_after.clear();
+				/* DEBUG cout << "before ";
+				for (int pi : added_ops_before) {
+					cout << pi << " ";
+				}
+				cout << "\n";
+				cout << "after ";
+				for (int pi : added_ops_after) {
+					cout << pi << " ";
+				}
+				cout << "\n\n"; */
 
 				// If loop hasn't grown in this iteration, finish the loop
                 if (change_counter == 0) {
                     finished = true;
                 }
 	        }
+
+			// Clean up
+			added_ops_before.clear();
+			added_ops_after.clear();
 
 			// See if any spins have a long field op acting on them
 			for (int s = 0; s < nspins; s++) {
@@ -934,6 +956,7 @@ int shift_update(int opstring[][3], int effexporder, int spins[], int nspins,
 
 	// First, generate list of all identity operators and find FM/AFM bonds
 	vector<int> idops = {};
+	idops.reserve(effexporder);
 	int spinstates[effexporder][nspins] = {0};
 	for (int p = 0; p < effexporder; p++) {
 		// Take record of current spin state
@@ -1366,6 +1389,10 @@ int cluster_updates(int spins[], int nspins, int bonds[][2],
                     finished = true;
                 }
 	        }
+
+			// Clean up
+			added_ops_before.clear();
+			added_ops_after.clear();
 
             // Now see if all legs of the bond ops in the cluster
             // belong to spin ops or other bond ops in the cluster
